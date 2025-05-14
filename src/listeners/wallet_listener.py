@@ -1,6 +1,7 @@
 """
 Will have the infrastructure used for copy trading
 """
+
 import json
 import os
 import asyncio
@@ -9,6 +10,7 @@ import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 class WalletListener:
     def __init__(self, wallet: str, max_retries: int = 10):
@@ -31,10 +33,7 @@ class WalletListener:
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "logsSubscribe",
-                "params": [
-                    {"mentions": [self.wallet]},
-                    {"commitment": "finalized"}
-                ]
+                "params": [{"mentions": [self.wallet]}, {"commitment": "finalized"}],
             }
             await self.ws.send(json.dumps(sub_req))
             self.running = True
@@ -49,7 +48,9 @@ class WalletListener:
             logging.info("🛑 Max retries exceeded. Stopping listener.")
             self.running = False
             return
-        logging.info(f"🔁 Attempting reconnect in {backoff} seconds... (retry {self.retries+1}/{self.max_retries})")
+        logging.info(
+            f"🔁 Attempting reconnect in {backoff} seconds... (retry {self.retries+1}/{self.max_retries})"
+        )
         await asyncio.sleep(backoff)
         self.retries += 1
         await self.connect()
