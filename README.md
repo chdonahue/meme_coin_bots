@@ -1,5 +1,8 @@
 # MEME COIN TRADING BOTS:
 
+### First time setup
+
+
 ### 🛠️ Setting Up the Environment (macOS)
 
 1. **Activate the virtual environment**  
@@ -10,6 +13,18 @@
     ```bash
     pip install -e .
     ```
+
+### 🛠️ Setting Up the Environment (Windows)
+
+1. **Activate the virtual environment**  
+    ```bash
+    venv\Scripts\activate
+    ```
+2. **Install the package in editable mode**
+    ```bash
+    pip install -e .
+    ```
+3. If there are failures, you may need to install vscpp build tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
 
 
 ### 🛡️ Pre-commit Formatting
