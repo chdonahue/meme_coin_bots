@@ -4,4 +4,3 @@ __pycache__/
 *.egg-info/
 .DS_Store
 .env
-.pre-commit-config.yaml
