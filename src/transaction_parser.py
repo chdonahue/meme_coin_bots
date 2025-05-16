@@ -134,7 +134,7 @@ def classify_transaction(tx_json) -> str:
     return "other"
 
 
-def parse_transfers(tx_json) -> List[ParsedTransaction]:
+def parse_transactions(tx_json) -> List[ParsedTransaction]:
     """
     Given a transaction json, this parses all the transaction details. Can be used downstream
     for building flexible strategies.
