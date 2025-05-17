@@ -6,7 +6,7 @@ import requests
 import asyncio
 import random
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from collections import defaultdict
 from base64 import b64decode
 from solders.keypair import Keypair
@@ -150,6 +150,12 @@ def process_token(token: dict) -> dict:
 async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
     """
     Get a wallet's SOL and SPL token balances with metadata efficiently.
+
+    Args:
+        wallet_address (str): Wallet address
+
+    Returns:
+        contents (dict): Dictionary of all tokens held by the wallet
     """
     helius_url = get_helius_url()
 
@@ -228,6 +234,13 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
 async def get_network_wallet_contents(wallet_addresses: List[str]) -> Dict[str, dict]:
     """
     Get combined contents of multiple wallets, merging balances of tokens with the same mint address.
+    Used for tracking networks of interconnected wallets.
+
+    Args:
+        wallet_addresses (list): List of wallet addresses
+
+    Returns:
+        contents (dict): Dictionary of tokens and amounts held by the group of wallets
     """
     combined_contents = defaultdict(
         lambda: {
