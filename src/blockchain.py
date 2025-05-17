@@ -148,17 +148,12 @@ def process_token(token: dict) -> dict:
 
 async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
     """
-    Get a wallet's SOL and SPL token balances with names and decimals.
-
-    Args:
-        wallet_address (str): The wallet address to check
-
-    Returns:
-        wallet_contents (Dict[str, dict]): A dictionary of token balances
+    Get a wallet's SOL and SPL token balances with metadata efficiently.
     """
     helius_url = get_helius_url()
 
-    payload = {
+    # Step 1: Fetch token accounts (raw amounts)
+    token_accounts_payload = {
         "jsonrpc": "2.0",
         "id": "get-tokens",
         "method": "getTokenAccounts",
@@ -168,11 +163,35 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
             "displayOptions": {"showZeroBalance": False},
         },
     }
-
-    data = post_json(helius_url, payload)
+    data = post_json(helius_url, token_accounts_payload)
     token_accounts = data.get("result", {}).get("token_accounts", [])
+
+    # Step 2: Fetch asset metadata in bulk
+    assets_payload = {
+        "jsonrpc": "2.0",
+        "id": "meta-bulk",
+        "method": "getAssetsByOwner",
+        "params": {
+            "ownerAddress": wallet_address,
+            "page": 1,
+            "limit": 1000,
+        },
+    }
+    assets_data = post_json(helius_url, assets_payload)
+    assets = assets_data.get("result", {}).get("items", [])
+
+    # Step 3: Index by mint for fast lookup
+    mint_to_meta = {
+        asset.get("id"): {
+            "name": asset.get("content", {}).get("metadata", {}).get("name", None),
+            "symbol": asset.get("content", {}).get("metadata", {}).get("symbol", None),
+            "decimals": asset.get("token_info", {}).get("decimals", None),
+        }
+        for asset in assets
+    }
+
+    # Step 4: Add SOL
     wallet_contents = {}
-    # Add SOL balance
     sol_balance = await get_sol_balance(wallet_address)
     if sol_balance > 0:
         wallet_contents[SOL] = {
@@ -184,11 +203,23 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
             "symbol": "SOL",
         }
 
-    # Add SPL token balances
+    # Step 5: Add SPL tokens using metadata
     for token in token_accounts:
-        if token.get("amount", 0) > 0:
-            result = process_token(token)
-            wallet_contents[result["mint"]] = result
+        mint = token.get("mint")
+        raw_amount = token.get("amount", 0)
+        if raw_amount <= 0:
+            continue
+        meta = mint_to_meta.get(mint, {})
+        decimals = meta.get("decimals")
+        amount = raw_amount / (10**decimals) if decimals is not None else None
+        wallet_contents[mint] = {
+            "mint": mint,
+            "raw_amount": raw_amount,
+            "amount": amount,
+            "decimals": decimals,
+            "name": meta.get("name", None),
+            "symbol": meta.get("symbol", None),
+        }
 
     return wallet_contents
 
