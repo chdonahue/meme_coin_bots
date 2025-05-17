@@ -7,6 +7,7 @@ import asyncio
 import random
 import logging
 from typing import Dict, Tuple
+from collections import defaultdict
 from base64 import b64decode
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
@@ -222,6 +223,40 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
         }
 
     return wallet_contents
+
+
+async def get_network_wallet_contents(wallet_addresses: List[str]) -> Dict[str, dict]:
+    """
+    Get combined contents of multiple wallets, merging balances of tokens with the same mint address.
+    """
+    combined_contents = defaultdict(
+        lambda: {
+            "mint": None,
+            "raw_amount": 0,
+            "amount": 0.0,
+            "decimals": None,
+            "name": None,
+            "symbol": None,
+        }
+    )
+
+    for address in wallet_addresses:
+        wallet_data = await get_wallet_contents(address)
+        for mint, token_data in wallet_data.items():
+            entry = combined_contents[mint]
+            entry["mint"] = mint
+            entry["decimals"] = token_data.get("decimals")
+            entry["name"] = token_data.get("name")
+            entry["symbol"] = token_data.get("symbol")
+            entry["raw_amount"] += token_data.get("raw_amount", 0)
+
+            # Avoid double scaling if decimals is None
+            if entry["decimals"] is not None:
+                entry["amount"] = entry["raw_amount"] / (10 ** entry["decimals"])
+            else:
+                entry["amount"] = None
+
+    return dict(combined_contents)
 
 
 async def wait_for_sol_diff(
