@@ -1,7 +1,7 @@
 import logging
 import requests
 import asyncio
-from typing import List, Optional, Literal, Dict
+from typing import List, Optional, Literal, Dict, Union
 from dataclasses import dataclass, field
 from src.blockchain import get_helius_url
 from src.token_addresses import ALL_SWAP_PROGRAMS, RAYDIUM_LP_PROGRAMS
@@ -236,3 +236,46 @@ def parse_transactions(tx_json) -> List[ParsedTransaction]:
         )
 
     return transfers
+
+
+def extract_swap_data(
+    parsed_txs: List[ParsedTransaction], tracked_wallets: Union[str, List[str]]
+) -> Optional[Dict]:
+    """
+    Extracts swap data from parsed transactions for a given wallet or list of wallets.
+    Handles both SOL → Token and Token → SOL directions.
+    """
+    if isinstance(tracked_wallets, str):
+        tracked_wallets = [tracked_wallets]
+
+    # Check if none of the txs are swaps, return early
+    if not any(tx.tx_type == "token_swap" for tx in parsed_txs):
+        return None
+
+    input_tx = None
+    output_tx = None
+
+    for tx in parsed_txs:
+        if (
+            tx.signer in tracked_wallets
+            and tx.direction == "outbound"
+            and tx.input_token is not None
+        ):
+            input_tx = tx
+
+        elif (
+            tx.wallet in tracked_wallets
+            and tx.direction == "inbound"
+            and tx.output_token is not None
+        ):
+            output_tx = tx
+
+    if input_tx and output_tx:
+        return {
+            "input_token": input_tx.input_token,
+            "input_amount": input_tx.input_amount,
+            "output_token": output_tx.output_token,
+            "output_amount": output_tx.output_amount,
+        }
+
+    return None
