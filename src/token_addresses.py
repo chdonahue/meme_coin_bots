@@ -4,8 +4,22 @@ SOL = "So11111111111111111111111111111111111111112"
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 
 
-RAYDIUM_AMM_PROGRAMS = {
-    "RVKd61ztZW9DQvukCWZqsMk8ZUJbwdcT2NU3PAvpDTv",  # Raydium V1
-    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",  # Raydium V2
-    # Add Orca or others if needed
+RAYDIUM_SWAP_PROGRAMS = {
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+    "RVKd61ztZW9GdKzHgv4X8JStpWQGy84yjsZ7eUvj1zK",
+    "7QzZzrvGv1n6xp47hDDuWTtr6AuwryyVMYDPnJY2Tn52",
 }
+
+RAYDIUM_LP_PROGRAMS = {
+    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+}
+
+OTHER_SWAP_PROGRAMS = {
+    "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",  # Jupiter
+    "82yxjeMs8T9Pz2Dk2W1jA6kJ7fwrRjFCwfjLhMZ6xR7a",  # Orca
+    "Meteora5JdCeekZ2u5MBzTr1ZnLoy93LahcBelh4TzxT",  # Meteora
+    "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS",  # Jupiter Router v4+
+    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",  # Jupiter AMM/Sidecar
+}
+
+ALL_SWAP_PROGRAMS = RAYDIUM_SWAP_PROGRAMS.union(OTHER_SWAP_PROGRAMS)

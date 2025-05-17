@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Optional, Literal, Dict
 from dataclasses import dataclass, field
 from src.blockchain import get_helius_url
-from src.token_addresses import RAYDIUM_AMM_PROGRAMS
+from src.token_addresses import ALL_SWAP_PROGRAMS, RAYDIUM_LP_PROGRAMS
 
 
 @dataclass
@@ -80,33 +80,30 @@ async def get_transaction_json(signature: str, retries: int = 5, delay: float = 
 
 def classify_transaction(tx_json) -> str:
     """
-    Currently looks for add liquidity,
-    Args:
-        tx_json (dict): The transaction dictionary
-
-    Returns:
-        transaction_type (str): A string representing the type of transaction (tx_type)
+    Classifies a Solana transaction by parsing logs and instructions.
     """
-
     if "meta" not in tx_json or tx_json["meta"].get("err"):
         return "failed"
 
     logs = tx_json["meta"].get("logMessages", [])
     inner = tx_json["meta"].get("innerInstructions", [])
+    top_level = (
+        tx_json.get("transaction", {}).get("message", {}).get("instructions", [])
+    )
 
-    # Collect all program IDs used in inner instructions
+    # Collect all program IDs from both inner and top-level
     all_program_ids = {
         ix.get("programId")
         for inner_ix in inner
         for ix in inner_ix.get("instructions", [])
         if "programId" in ix
-    }
+    }.union({ix.get("programId") for ix in top_level if "programId" in ix})
 
     is_liquidity_add = any(
-        pid in RAYDIUM_AMM_PROGRAMS for pid in all_program_ids
+        pid in RAYDIUM_LP_PROGRAMS for pid in all_program_ids
     ) or any("liquidity:" in log or "vault_" in log for log in logs)
 
-    if any("Instruction: Swap" in log for log in logs):
+    if any(pid in ALL_SWAP_PROGRAMS for pid in all_program_ids):
         return "token_swap"
 
     if any("Instruction: Burn" in log for log in logs):
@@ -121,11 +118,9 @@ def classify_transaction(tx_json) -> str:
         return "token_mint"
 
     if any("Instruction: MintTo" in log for log in logs):
-        # Disqualify LP token mints
         if not is_liquidity_add:
             return "token_mint"
 
-    # Fallback: SOL transfer if lamports moved
     pre = tx_json["meta"].get("preBalances", [])
     post = tx_json["meta"].get("postBalances", [])
     if pre != post:
@@ -145,11 +140,17 @@ def parse_transactions(tx_json) -> List[ParsedTransaction]:
     Returns:
         A list of ParsedTransactions for each involved wallet in the transaction
     """
+
     signature = tx_json.get("transaction", {}).get("signatures", [""])[0]
     tx_type = classify_transaction(tx_json)
     meta = tx_json.get("meta", {})
     message = tx_json.get("transaction", {}).get("message", {})
     account_keys = message.get("accountKeys", [])
+    signers = {
+        acct["pubkey"]
+        for acct in account_keys
+        if isinstance(acct, dict) and acct.get("signer")
+    }
     pre = meta.get("preBalances", [])
     post = meta.get("postBalances", [])
     pre_tokens = meta.get("preTokenBalances", [])
@@ -173,6 +174,7 @@ def parse_transactions(tx_json) -> List[ParsedTransaction]:
             ParsedTransaction(
                 tx_type=tx_type,
                 signature=signature,
+                signer=key if key in signers else None,
                 wallet=key,
                 direction=direction,
                 input_token="SOL" if direction == "outbound" else None,
@@ -217,6 +219,7 @@ def parse_transactions(tx_json) -> List[ParsedTransaction]:
             ParsedTransaction(
                 tx_type=tx_type,  # use consistent label unless you want "spl_transfer"
                 signature=signature,
+                signer=wallet if wallet in signers else None,
                 wallet=wallet,
                 direction=direction,
                 input_token=mint if direction == "outbound" else None,
