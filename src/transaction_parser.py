@@ -82,6 +82,7 @@ def classify_transaction(tx_json) -> str:
     """
     Classifies a Solana transaction by parsing logs and instructions.
     """
+
     if "meta" not in tx_json or tx_json["meta"].get("err"):
         return "failed"
 
@@ -99,11 +100,14 @@ def classify_transaction(tx_json) -> str:
         if "programId" in ix
     }.union({ix.get("programId") for ix in top_level if "programId" in ix})
 
+    is_swap = any(pid in ALL_SWAP_PROGRAMS for pid in all_program_ids)
     is_liquidity_add = any(
         pid in RAYDIUM_LP_PROGRAMS for pid in all_program_ids
     ) or any("liquidity:" in log or "vault_" in log for log in logs)
 
-    if any(pid in ALL_SWAP_PROGRAMS for pid in all_program_ids):
+    if is_swap or any(
+        "Instruction: Sell" in log or "Instruction: Route" in log for log in logs
+    ):
         return "token_swap"
 
     if any("Instruction: Burn" in log for log in logs):
