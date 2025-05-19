@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Optional, Literal, Dict, Union
 from dataclasses import dataclass, field
 from src.blockchain import get_helius_url
-from src.token_addresses import ALL_SWAP_PROGRAMS, RAYDIUM_LP_PROGRAMS
+from src.token_addresses import ALL_SWAP_PROGRAMS, RAYDIUM_LP_PROGRAMS, SOL
 
 
 @dataclass
@@ -133,7 +133,7 @@ def classify_transaction(tx_json) -> str:
     return "other"
 
 
-def parse_transactions(tx_json) -> List[ParsedTransaction]:
+def parse_transaction(tx_json) -> List[ParsedTransaction]:
     """
     Given a transaction json, this parses all the transaction details. Can be used downstream
     for building flexible strategies.
@@ -181,10 +181,10 @@ def parse_transactions(tx_json) -> List[ParsedTransaction]:
                 signer=key if key in signers else None,
                 wallet=key,
                 direction=direction,
-                input_token="SOL" if direction == "outbound" else None,
+                input_token=SOL if direction == "outbound" else None,
                 input_amount=lamports if direction == "outbound" else None,
                 input_ui_amount=sol if direction == "outbound" else None,
-                output_token="SOL" if direction == "inbound" else None,
+                output_token=SOL if direction == "inbound" else None,
                 output_amount=lamports if direction == "inbound" else None,
                 output_ui_amount=sol if direction == "inbound" else None,
             )
