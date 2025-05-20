@@ -6,7 +6,7 @@ import requests
 import asyncio
 import random
 import logging
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Union
 from collections import defaultdict
 from base64 import b64decode
 from solders.keypair import Keypair
@@ -60,6 +60,21 @@ def convert_to_base_unit(mint_address, amount: float) -> int:
     """
     decimals = get_token_decimals(mint_address)
     return int(amount * (10**decimals))
+
+
+def base_to_ui_unit(mint_address, amount_base: float) -> int:
+    """
+    Converts a mint address base unit to canonical unit :
+    For example, 1 LAMPORT will be converted to 1e-9 SOL
+    Args:
+        mint_address (str): Mint address of token
+        amount_base (int): Amount of token in canonical units
+
+    Returns:
+        int: Amount of token in base units
+    """
+    decimals = get_token_decimals(mint_address)
+    return amount_base // (10**decimals)
 
 
 async def get_sol_balance(wallet_address: str) -> int:
@@ -231,7 +246,9 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
     return wallet_contents
 
 
-async def get_network_wallet_contents(wallet_addresses: List[str]) -> Dict[str, dict]:
+async def get_network_wallet_contents(
+    wallet_addresses: Union[str, List[str]],
+) -> Dict[str, dict]:
     """
     Get combined contents of multiple wallets, merging balances of tokens with the same mint address.
     Used for tracking networks of interconnected wallets.
@@ -242,6 +259,9 @@ async def get_network_wallet_contents(wallet_addresses: List[str]) -> Dict[str, 
     Returns:
         contents (dict): Dictionary of tokens and amounts held by the group of wallets
     """
+
+    if isinstance(wallet_addresses, str):
+        wallet_addresses = [wallet_addresses]
     combined_contents = defaultdict(
         lambda: {
             "mint": None,
