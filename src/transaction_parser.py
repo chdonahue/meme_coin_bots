@@ -250,7 +250,7 @@ def extract_swap_data(
 
     # Check if none of the txs are swaps, return early
     if not any(tx.tx_type == "token_swap" for tx in parsed_txs):
-        return None
+        return {}
 
     input_tx = None
     output_tx = None
@@ -278,4 +278,4 @@ def extract_swap_data(
             "output_amount": output_tx.output_amount,
         }
 
-    return None
+    return {}
