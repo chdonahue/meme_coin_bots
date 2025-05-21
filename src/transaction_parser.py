@@ -80,56 +80,64 @@ async def get_transaction_json(signature: str, retries: int = 5, delay: float = 
 
 def classify_transaction(tx_json) -> str:
     """
-    Classifies a Solana transaction by parsing logs and instructions.
+    Classifies a Solana transaction into types like token_swap, transfer, token_mint, etc.
     """
 
+    # === Step 1: Quick exit for failed transactions ===
     if "meta" not in tx_json or tx_json["meta"].get("err"):
         return "failed"
 
-    logs = tx_json["meta"].get("logMessages", [])
-    inner = tx_json["meta"].get("innerInstructions", [])
+    meta = tx_json["meta"]
+    logs = meta.get("logMessages", [])
+    inner = meta.get("innerInstructions", [])
     top_level = (
         tx_json.get("transaction", {}).get("message", {}).get("instructions", [])
     )
 
-    # Collect all program IDs from both inner and top-level
+    # === Step 2: Collect all program IDs ===
     all_program_ids = {
         ix.get("programId")
-        for inner_ix in inner
-        for ix in inner_ix.get("instructions", [])
+        for ix_group in inner
+        for ix in ix_group.get("instructions", [])
         if "programId" in ix
     }.union({ix.get("programId") for ix in top_level if "programId" in ix})
 
-    is_swap = any(pid in ALL_SWAP_PROGRAMS for pid in all_program_ids)
-    is_liquidity_add = any(
-        pid in RAYDIUM_LP_PROGRAMS for pid in all_program_ids
-    ) or any("liquidity:" in log or "vault_" in log for log in logs)
-
-    if is_swap or any(
-        "Instruction: Sell" in log or "Instruction: Route" in log for log in logs
+    # === Step 3: Match known patterns ===
+    if any(pid in ALL_SWAP_PROGRAMS for pid in all_program_ids) or any(
+        "Instruction: Buy" in log
+        or "Instruction: Sell" in log
+        or "Instruction: Route" in log
+        or "swap" in log.lower()
+        for log in logs
     ):
         return "token_swap"
 
     if any("Instruction: Burn" in log for log in logs):
         return "token_burn"
 
-    if is_liquidity_add:
+    if any(pid in RAYDIUM_LP_PROGRAMS for pid in all_program_ids) or any(
+        "liquidity:" in log or "vault_" in log for log in logs
+    ):
         return "add_liquidity"
 
     if any(
-        "Instruction: InitializeMint" in log or "InitializeMint2" in log for log in logs
+        "Instruction: InitializeMint" in log
+        or "InitializeMint2" in log
+        or "Instruction: MintTo" in log
+        for log in logs
     ):
         return "token_mint"
 
-    if any("Instruction: MintTo" in log for log in logs):
-        if not is_liquidity_add:
-            return "token_mint"
+    # === Step 4: Catch fallback transfers (non-SPL-token movement) ===
+    pre = meta.get("preBalances", [])
+    post = meta.get("postBalances", [])
+    pre_tokens = meta.get("preTokenBalances", [])
+    post_tokens = meta.get("postTokenBalances", [])
 
-    pre = tx_json["meta"].get("preBalances", [])
-    post = tx_json["meta"].get("postBalances", [])
-    if pre != post:
+    if (pre != post) or (pre_tokens != post_tokens):
         return "transfer"
 
+    # === Step 5: Default case ===
     return "other"
 
 
