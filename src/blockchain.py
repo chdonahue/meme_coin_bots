@@ -307,10 +307,7 @@ async def wait_for_sol_diff(
         current_lamports = contents.get(SOL, {}).get("raw_amount", 0)
 
         # Check both: balance has changed and it's not just a dust blip
-        if (
-            current_lamports != prev_lamports
-            and current_lamports >= min_change_threshold
-        ):
+        if abs(current_lamports - prev_lamports) >= min_change_threshold:
             logging.info(
                 f"[INFO] Wallet change detected in {address}: {prev_lamports} -> {current_lamports}"
             )
