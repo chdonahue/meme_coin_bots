@@ -250,6 +250,9 @@ class WalletListener:
                         logging.info(f"[{wallet}] Catch-up sig: {sig}")
                         await self.queues[wallet].put(sig)
 
+                        # ✅ Update last_seen_signature as we process it
+                        self.last_seen_signature[wallet] = sig
+
         except Exception as e:
             logging.error(f"[{wallet}] Failed to backfill missed sigs: {e}")
 
