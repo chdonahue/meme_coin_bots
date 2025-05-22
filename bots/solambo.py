@@ -5,6 +5,7 @@ However, the person adds a ton of liquidity to the pool so it is quite possible 
 The trader for the previous one becomes the seed for the next. Transfers can be up to a couple hours before.
 The new coin can mint any time in the 2 hours before, and sometimes he pulls the trade and goes into another at the last minute.
 So far pumps have been executing at 11:00
+NOTE: Eventually would be good to edge into buying. Perhaps half in at go time, then put half more after a large sell order (would have to detect quicker)
 """
 
 import os
@@ -13,20 +14,15 @@ import asyncio
 from datetime import datetime
 import logging
 from dotenv import load_dotenv
-from src.wallet_secrets import (
-    WalletType,
-    get_wallet_address,
-    get_wallet_keypair,
-)
+from src.wallet.wallet import WalletType
+from src.wallet.wallet_manager import WalletManager
 from src.token_addresses import SOL
 from src.blockchain import (
     convert_to_base_unit,
-    transfer_sol,
     retry_swap_tokens,
     get_wallet_contents,
-    wait_for_sol_diff,
 )
-from src.strategy import (
+from src.strategy.strategy import (
     ExitRules,
     poll_until_exit,
     start_keyboard_listener,
@@ -41,8 +37,8 @@ TARGET_TIME = now.replace(
     hour=10, minute=55, second=15  # this seems to be a good time before massive buying
 )  # Set to initiate SWAP at 10:55:15
 BASE_IDX = 0  # Index for the BASE wallet (trade this less frequently whenever I want to cash out or rebalance)
-BOT_IDX = 2  # Index for this trade Eventually auto increment once I have a listener
-MAX_SOL = 0.3  # Maximum SOL to devote to strategy
+BOT_IDX = 0  # Index for this trade Eventually auto increment once I have a listener
+MAX_SOL = 0.6  # Maximum SOL to devote to strategy
 
 SLIPPAGE_BPS = 4500  # 45% slippage for exit trade
 PRIORITIZATION_FEE = 100000
@@ -51,9 +47,9 @@ RENT_BUFFER = (
 )
 
 exit_rules = ExitRules(
-    max_duration_s=60 * 10,  # 6 min (from the TARGET TIME)
-    take_half_at=20,  # 60% gain
-    take_all_at=200,  # 250% gain
+    max_duration_s=60 * 9,  # 9 min (from the TARGET TIME)
+    take_half_at=30,  # 30% gain
+    take_all_at=100,  # 100% gain
     stop_out_at=-30,  # get completely out at -30%
     polling_interval=5,  # 5s intervals
 )
@@ -63,25 +59,9 @@ KEYBOARD_EXIT_MAPPING = {
     "a": "sell_all",
 }
 
-# Get wallets for this strategy:
-base_phrase = os.getenv("SOLAMBO_BASE")
-trade_phrase = os.getenv("SOLAMBO_TRADE")
-base_bot_address = get_wallet_address(
-    wallet_type=WalletType.BOT, mnemonic_phrase=base_phrase, wallet_idx=BASE_IDX
-)
-base_bot_keypair = get_wallet_keypair(
-    wallet_type=WalletType.BOT, mnemonic_phrase=base_phrase, wallet_idx=BASE_IDX
-)
-trade_bot_address = get_wallet_address(
-    wallet_type=WalletType.BOT, mnemonic_phrase=trade_phrase, wallet_idx=BOT_IDX
-)
-trade_bot_keypair = get_wallet_keypair(
-    wallet_type=WalletType.BOT, mnemonic_phrase=trade_phrase, wallet_idx=BOT_IDX
-)
-
 
 # Configure Logging
-def setup_logger(strategy_name="Test"):
+def setup_logger(strategy_name="Solambo"):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_dir = os.path.join(os.path.dirname(__file__), "logs")
     os.makedirs(log_dir, exist_ok=True)
@@ -115,7 +95,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def run_strategy(token_address, exit_rules):
+async def run_strategy(trader: WalletManager, base: WalletManager, token_address: str):
     """
     This runs the strategy logic for the trade bot
     """
@@ -137,24 +117,23 @@ async def run_strategy(token_address, exit_rules):
     start_keyboard_listener(queue, loop, key_command_map=KEYBOARD_EXIT_MAPPING)
 
     logging.info("EXECUTING SWAP STRATEGY:")
-    pre_trade_lamports = 0
     # # MAKE INITIAL SWAP INTO TOKEN (SOL -> TOKEN)
     logging.info(f"Swapping SOL into {token_address}")
-    wallet_contents = await get_wallet_contents(trade_bot_address)
-    amount_lamports = wallet_contents.get(SOL, {}).get("raw_amount", 0) - RENT_BUFFER
+    amount_lamports = await trader.get_lamports()
+    amount_lamports = max(amount_lamports - trader.rent_buffer, 0)
+
     transaction_info = await retry_swap_tokens(
         input_mint=SOL,
         output_mint=token_address,
         amount=amount_lamports,
-        wallet_keypair=trade_bot_keypair,
-        slippage_bps=300,  # Lower slippage for the initial trade in
+        wallet_keypair=trader.keypair,
+        slippage_bps=300,
         prioritization_fee=PRIORITIZATION_FEE,
     )
-    logging.info(f"Transaction executed: {transaction_info['signature']}")
-
-    # NOW START POLLING FOR EXIT STRATEGY:
+    logging.info(f"Swap TX: {transaction_info['signature']}")
     entry_quote = transaction_info["quote"]
 
+    # NOW START POLLING FOR EXIT STRATEGY:
     async for event in poll_until_exit(
         exit_rules,
         input_mint=SOL,
@@ -164,58 +143,35 @@ async def run_strategy(token_address, exit_rules):
     ):
 
         logging.info(f"Event Detected: {event}")
+        token_balance = await trader.get_token_balance(token_address)
 
         if event == "sell_half":
-            wallet_contents = await get_wallet_contents(trade_bot_address)
-            exit_amount = max(
-                wallet_contents.get(token_address, {}).get("raw_amount", 0) // 2, 0
-            )
-            await retry_swap_tokens(
-                input_mint=token_address,
-                output_mint=SOL,
-                amount=exit_amount,
-                wallet_keypair=trade_bot_keypair,
-                slippage_bps=SLIPPAGE_BPS,
-                prioritization_fee=PRIORITIZATION_FEE,
-            )
+            amount = token_balance // 2
+        elif event == "sell_all":
+            pre_lamports = await trader.get_lamports()
+            amount = token_balance
+        else:
             continue
 
-        elif event == "sell_all":
-            wallet_contents = await get_wallet_contents(trade_bot_address)
-            exit_amount = wallet_contents.get(token_address, {}).get("raw_amount", 0)
-            pre_trade_lamports = wallet_contents.get(SOL, {}).get("raw_amount", 0)
+        await retry_swap_tokens(
+            input_mint=token_address,
+            output_mint=SOL,
+            amount=amount,
+            wallet_keypair=trader.keypair,
+            slippage_bps=SLIPPAGE_BPS,
+            prioritization_fee=PRIORITIZATION_FEE,
+        )
 
-            await retry_swap_tokens(
-                input_mint=token_address,
-                output_mint=SOL,
-                amount=exit_amount,
-                wallet_keypair=trade_bot_keypair,
-                slippage_bps=SLIPPAGE_BPS,
-                prioritization_fee=PRIORITIZATION_FEE,
-                max_retries=10,
-            )
-            break  # exit the loop cleanly
+        if event == "sell_all":
+            break
 
     # Final transfer step
-    logging.info("Waiting for Wallet to change state:")
-    await wait_for_sol_diff(
-        address=trade_bot_address, prev_lamports=pre_trade_lamports, timeout=30
-    )
-    wallet_contents = await get_wallet_contents(trade_bot_address)
-    lamports_to_transfer = (
-        wallet_contents.get(SOL, {}).get("raw_amount", 0) - RENT_BUFFER
-    )
-    lamports_to_transfer = max(lamports_to_transfer, 0)
-    logging.info(
-        f"Transferring {lamports_to_transfer} lamports from {trade_bot_address} to {base_bot_address}"
-    )
-    signature = await transfer_sol(
-        trade_bot_keypair, base_bot_address, lamports_to_transfer
-    )
-    logging.info(
-        f"Transferred {lamports_to_transfer} from trade wallet to base wallet: ({base_bot_address})"
-    )
-    logging.info(f"Signature: {signature}")
+    if pre_lamports is not None:
+        logging.info("Waiting for SOL change after exit")
+        await trader.wait_for_change(prev_lamports=pre_lamports)
+
+    sig = await trader.transfer_all_to(base.address)
+    logging.info(f"Final transfer complete: {sig}")
 
 
 async def main():
@@ -224,42 +180,41 @@ async def main():
     args = parse_args()
     if not args.token_address:
         raise ValueError("Token address must be provided via --token_address")
-
     token_address = args.token_address
+
     # GET BASE WALLET CONTENTS:
-    base_wallet_contents = await get_wallet_contents(base_bot_address)
-    base_wallet_sol = base_wallet_contents.get(SOL, {}).get("amount", 0)
-    amount_sol = min(
-        args.amount_sol, MAX_SOL, base_wallet_sol
-    )  # Get a safe amount of SOL to transfer
+    base_mnemonic = os.getenv("SOLAMBO_BASE")
+    trade_mnemonic = os.getenv("SOLAMBO_TRADE")
+    base = WalletManager(WalletType.BOT, mnemonic=base_mnemonic, wallet_idx=BASE_IDX)
+    trader = WalletManager(WalletType.BOT, mnemonic=trade_mnemonic, wallet_idx=BOT_IDX)
+
+    base_contents = await get_wallet_contents(base.address)
+    base_sol = base_contents.get(SOL, {}).get("amount", 0)
+    amount_sol = min(args.amount_sol or 0, MAX_SOL, base_sol)
 
     # ==================================================
     # 1: TRANSFER SOL FROM BASE WALLET TO TRADING WALLET
     # ==================================================
-    logging.info(f"Trading {amount_sol} from Base Wallet: {base_bot_address}")
-    lamports_to_transfer = convert_to_base_unit(SOL, amount=amount_sol) - RENT_BUFFER
-    signature = await transfer_sol(
-        base_bot_keypair, trade_bot_address, lamports_to_transfer
-    )
     logging.info(
-        f"Transferred {lamports_to_transfer} lamports from {base_bot_address} to {trade_bot_address}"
+        f"Trading {amount_sol} from Base Wallet: {base.address} to {trader.address}"
     )
-    logging.info(f"Signature: {signature}")
+    lamports_to_transfer = convert_to_base_unit(SOL, amount=amount_sol)
+    sig = await base.transfer_to(
+        trader.address, lamports_to_transfer
+    )  # transfer from base to trader
+    logging.info(f"Transfer TX: {sig}")
 
-    # Wait for wallet to change state:
     logging.info("Waiting for Wallet to change state:")
-    previous_lamports = convert_to_base_unit(SOL, amount=base_wallet_sol)
-    await wait_for_sol_diff(
-        address=base_bot_address, prev_lamports=previous_lamports, timeout=30
-    )
+    await base.wait_for_change(
+        prev_lamports=convert_to_base_unit(SOL, base_sol)
+    )  # wait for base wallet to change state
 
+    # ==================================================
+    # 2. WAIT UNTIL TARGET TIME AND EXECUTE SWAP STRATEGY:
+    # ==================================================
     logging.info(f"Waiting until: {TARGET_TIME}")
     await wait_until(TARGET_TIME)
-    # ==========================================
-    # 2: EXECUTE SWAP STRATEGY:
-    # ==========================================
-    await run_strategy(token_address, exit_rules)
-
+    await run_strategy(trader, base, token_address)
     logging.info("STRATEGY COMPLETE!!")
 
 
