@@ -7,13 +7,16 @@ import requests
 import os
 import json
 import base64
-from src.blockchain import get_helius_url, post_json
+from src.blockchain import get_helius_url, post_json, get_jupiter_quote
+from src.token_addresses import SOL, USDC
 from solders.pubkey import Pubkey
+from statistics import median
+
 
 # Raydium lists tokens in alphabetical order instead of by base priority, so this is to highlight which ones I want to be the base mint
 BASE_TOKEN_PRIORITY = [
-    "So11111111111111111111111111111111111111112",  # SOL
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC
+    SOL,  # SOL
+    USDC,  # USDC
     # Add more base-preferred tokens here
 ]
 
@@ -55,6 +58,43 @@ def get_project_root(marker=".git") -> Path:
     raise FileNotFoundError(f"Could not find project root with marker '{marker}'")
 
 
+async def estimate_liquidity(token_address, input_token=SOL):
+    """
+    This will heuristically estimate a token's liquidity from the jupiter price quote.
+    I multiply by 2 to get both sides to best match dexscreener's values.
+    Note that the curve is nonlinear and the result depends on where you sample.
+    I default to 1 SOL for consistency, but if price impact is too large one should not trade.
+
+    Args:
+        token_address: mint address to estimate for liquidity
+        input_token (str): Defaults to SOL address
+        input_amount (int): Defaults to 1e9 (1 SOL)
+
+    Returns:
+        liquidity (float): This is returned in the input_token's base currency
+    """
+    estimates = []
+    input_amounts = [
+        0.1,
+        0.25,
+        0.5,
+        1,
+        2,
+        5,
+        10,
+    ]  # These are points at which to sample the AMM curve
+    for amount in input_amounts:
+        amount = int(amount * 10**9)  # convert to lamports
+        quote = await get_jupiter_quote(input_token, token_address, amount=amount)
+        slippage = float(quote.get("priceImpactPct", 0.0))
+        if 0.001 < slippage < 0.10:  # Only look at 0.1% to 10% slippage
+            liquidity = int(quote["inAmount"]) / float(quote["priceImpactPct"])
+            estimates.append(liquidity)
+    if not estimates:
+        return None  # Can't find liquidity
+    return median(estimates) * 2  # get double-sided liquidity similar to dexscreener
+
+
 #####################################################################
 # RAYDIUM POOLS:
 #####################################################################
@@ -64,9 +104,13 @@ def cache_raydium_pools():
     It is LARGE AND SLOW. Only use if not time sensitive!
     """
     PROJECT_ROOT = get_project_root()
+    data_dir = os.path.join(PROJECT_ROOT, "data")
+    os.makedirs(data_dir, exist_ok=True)  # creates the folder if missing
+
     url = "https://api.raydium.io/v2/sdk/liquidity/mainnet.json"
     data = requests.get(url).json()
-    with open(os.path.join(PROJECT_ROOT, "data/raydium_pools.json"), "w") as f:
+
+    with open(os.path.join(data_dir, "raydium_pools.json"), "w") as f:
         json.dump(data, f)
 
 
@@ -77,7 +121,8 @@ def load_cached_pools():
         dict: The liquidity pool dictionary
     """
     PROJECT_ROOT = get_project_root()
-    with open(os.path.join(PROJECT_ROOT, "data/raydium_pools.json"), "r") as f:
+    data_dir = os.path.join(PROJECT_ROOT, "data")
+    with open(os.path.join(data_dir, "raydium_pools.json"), "r") as f:
         return json.load(f)
 
 
