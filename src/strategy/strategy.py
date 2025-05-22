@@ -3,13 +3,14 @@ Contains tools for defining strategies
 """
 
 import time
+import re
 import asyncio
 import logging
 from pynput.keyboard import Listener
 import threading
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 from src.token_addresses import SOL
 from src.blockchain import get_jupiter_quote
 
@@ -140,41 +141,6 @@ async def wait_until(target_time: datetime):
         await asyncio.sleep(sleep_time)
 
 
-# def start_keyboard_listener(queue: asyncio.Queue, key_command_map: Dict[str, str]):
-#     """
-#     Starts a background thread to listen for key presses.
-#     Injects mapped commands into the provided asyncio queue.
-
-#     Args:
-#         queue (asyncio.Queue): Queue to place commands in.
-#         key_command_map (dict): Dict mapping keys (str) to commands (str).
-#     """
-#     # Capture the current event loop at the time this function is called
-#     loop = asyncio.get_event_loop()
-
-#     def on_press(key):
-#         try:
-#             if hasattr(key, 'char') and key.char:
-#                 char = key.char.lower()
-#                 if char in key_command_map:
-#                     logging.info(f"Key '{char}' OVERRIDE: {key_command_map[char]}")
-#                     future = asyncio.run_coroutine_threadsafe(
-#                         queue.put(key_command_map[char]),
-#                         loop
-#                     )
-#                     # Optional: handle exceptions if desired
-#                     # result = future.result(timeout=1)
-#         except Exception as e:
-#             print(f"Error handling key press: {e}")
-
-#     def listen():
-#         with Listener(on_press=on_press) as listener:
-#             listener.join()
-
-#     thread = threading.Thread(target=listen, daemon=True)
-#     thread.start()
-
-
 def start_keyboard_listener(
     queue: asyncio.Queue,
     loop: asyncio.AbstractEventLoop,
@@ -204,3 +170,17 @@ async def watch_keyboard(queue: asyncio.Queue, current_override: dict):
         command = await queue.get()
         current_override["event"] = command
         logging.info(f"Keyboard override set: {command}")
+
+
+def find_solana_addresses(text: str) -> List[str]:
+    """
+    Function that finds all Solana addresses in a given string.
+
+    Args:
+        text: The text to search for Solana addresses
+
+    Returns:
+        List[str]: List of Solana addresses found
+    """
+    solana_regex = r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b"
+    return re.findall(solana_regex, text)
