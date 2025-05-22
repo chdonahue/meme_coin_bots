@@ -1,6 +1,6 @@
 # src/wallet/wallet_manager.py
 
-from src.wallet.wallet import WalletType, get_wallet_address, get_wallet_keypair
+from src.wallet.wallet import WalletType
 from src.wallet.wallet_factory import WalletFactory
 from src.blockchain import get_wallet_contents, transfer_sol, wait_for_sol_diff
 from src.token_addresses import SOL
