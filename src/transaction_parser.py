@@ -112,14 +112,14 @@ def classify_transaction(tx_json) -> str:
     ):
         return "token_swap"
 
-    if any("Instruction: Burn" in log for log in logs):
-        return "token_burn"
-
     if any(pid in RAYDIUM_LP_PROGRAMS for pid in all_program_ids) or any(
-        "liquidity:" in log or "vault_" in log for log in logs
+        "Instruction: CreatePool" in log or "Instruction: AddLiquidity" in log
+        for log in logs
     ):
         return "add_liquidity"
 
+    if any("Instruction: Burn" in log for log in logs):
+        return "token_burn"
     if any(
         "Instruction: InitializeMint" in log
         or "InitializeMint2" in log

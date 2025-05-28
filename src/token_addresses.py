@@ -12,6 +12,7 @@ RAYDIUM_SWAP_PROGRAMS = {
 
 RAYDIUM_LP_PROGRAMS = {
     "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+    "39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg",  # This address adds newly bonded tokens
 }
 
 OTHER_SWAP_PROGRAMS = {
