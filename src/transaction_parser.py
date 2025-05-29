@@ -287,3 +287,41 @@ def extract_swap_data(
         }
 
     return {}
+
+
+def extract_new_token_mint(tx_json: dict) -> str | None:
+    """
+    Extracts the newly introduced (likely LP) token from raw tx_json by comparing pre and post balances.
+    Returns a mint that was either missing or had 0 balance before, but now has a positive balance.
+
+    Args:
+        tx_json (dict): transaction info
+
+    Returns:
+        str or None: Detected new token mint
+    """
+
+    pre = tx_json.get("meta", {}).get("preTokenBalances", [])
+    post = tx_json.get("meta", {}).get("postTokenBalances", [])
+
+    # Build dict: (account, mint) → pre amount
+    pre_balances = {
+        (p["accountIndex"], p["mint"]): int(p["uiTokenAmount"]["amount"]) for p in pre
+    }
+
+    # Candidates: tokens that had 0 or no pre balance, but now have a positive balance
+    candidates = []
+    for p in post:
+        key = (p["accountIndex"], p["mint"])
+        post_amt = int(p["uiTokenAmount"]["amount"])
+        pre_amt = pre_balances.get(key, 0)
+
+        if pre_amt == 0 and post_amt > 0 and p["mint"] != SOL:
+            candidates.append((p["mint"], post_amt))
+
+    if not candidates:
+        return None
+
+    # Return the one with the largest post amount (most likely LP token)
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    return candidates[0][0]
