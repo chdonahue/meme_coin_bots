@@ -1,8 +1,13 @@
 # src/wallet/wallet_manager.py
 
-from src.wallet.wallet import WalletType
+from src.wallet.wallet import WalletType, get_total_wallet_value
 from src.wallet.wallet_factory import WalletFactory
-from src.blockchain import get_wallet_contents, transfer_sol, wait_for_sol_diff
+from src.blockchain import (
+    get_wallet_contents,
+    transfer_sol,
+    wait_for_sol_diff,
+    get_jupiter_quote_with_backoff,
+)
 from src.token_addresses import SOL
 
 
@@ -50,3 +55,17 @@ class WalletManager:
     async def get_token_balance(self, mint: str) -> int:
         contents = await self.get_contents()
         return contents.get(mint, {}).get("raw_amount", 0)
+
+    async def get_total_value(
+        self, token_threshold: int = 100_000, max_tokens: int = 15
+    ) -> int:
+        """
+        Get the total value of the wallet in lamports
+        It uses the jupiter API to get real time quotes for each token in the wallet
+        Args:
+            token_threshold (int): Skips trying to find value of tokens where amount is below this theshold (to avoid too many API calls)
+            max_tokens (int): Truncates search after max_tokens is reached
+        """
+        return await get_total_wallet_value(
+            self.address, token_threshold=token_threshold, max_tokens=max_tokens
+        )

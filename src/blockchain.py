@@ -6,6 +6,7 @@ import requests
 import asyncio
 import random
 import logging
+from collections import OrderedDict
 from typing import Dict, Tuple, List, Union
 from collections import defaultdict
 from base64 import b64decode
@@ -162,9 +163,10 @@ def process_token(token: dict) -> dict:
         }
 
 
-async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
+async def get_wallet_contents(wallet_address: str) -> OrderedDict[str, dict]:
     """
     Get a wallet's SOL and SPL token balances with metadata efficiently.
+    This will create an ordered dict with SOL first and the rest of the tokens ordered by their base amount
 
     Args:
         wallet_address (str): Wallet address
@@ -213,7 +215,7 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
     }
 
     # Step 4: Add SOL
-    wallet_contents = {}
+    wallet_contents = OrderedDict()
     sol_balance = await get_sol_balance(wallet_address)
     if sol_balance > 0:
         wallet_contents[SOL] = {
@@ -226,6 +228,7 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
         }
 
     # Step 5: Add SPL tokens using metadata
+    spl_tokens = []
     for token in token_accounts:
         mint = token.get("mint")
         raw_amount = token.get("amount", 0)
@@ -234,14 +237,25 @@ async def get_wallet_contents(wallet_address: str) -> Dict[str, dict]:
         meta = mint_to_meta.get(mint, {})
         decimals = meta.get("decimals")
         amount = raw_amount / (10**decimals) if decimals is not None else None
-        wallet_contents[mint] = {
-            "mint": mint,
-            "raw_amount": raw_amount,
-            "amount": amount,
-            "decimals": decimals,
-            "name": meta.get("name", None),
-            "symbol": meta.get("symbol", None),
-        }
+        spl_tokens.append(
+            (
+                mint,
+                {
+                    "mint": mint,
+                    "raw_amount": raw_amount,
+                    "amount": amount,
+                    "decimals": decimals,
+                    "name": meta.get("name", None),
+                    "symbol": meta.get("symbol", None),
+                },
+            )
+        )
+
+    # Step 6: Sort SPL tokens and add to wallet_contents
+    spl_tokens_sorted = sorted(
+        spl_tokens, key=lambda item: item[1]["raw_amount"], reverse=True
+    )
+    wallet_contents.update(spl_tokens_sorted)
 
     return wallet_contents
 
@@ -521,6 +535,27 @@ async def get_jupiter_quote(
     response.raise_for_status()
     quote = response.json()
     return quote
+
+
+async def get_jupiter_quote_with_backoff(
+    input_mint: str, output_mint: str, amount: int, slippage_bps: int = 100
+):
+    retries = 3
+    for i in range(retries):
+        try:
+            return await get_jupiter_quote(
+                input_mint, output_mint, amount, slippage_bps
+            )
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                wait_time = 2**i
+                logging.info(f"[WARN] Rate limit hit. Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            elif e.response.status_code == 400:  # bad quote
+                logging.info("Token pair doesn't seem to be available for quote")
+                return None
+            else:
+                raise
 
 
 async def get_swap_transaction(

@@ -4,6 +4,8 @@ Utility functions to work with wallets
 
 from dotenv import load_dotenv
 import os
+import asyncio
+import logging
 from bip_utils import (
     Bip39SeedGenerator,
     Bip44,
@@ -16,6 +18,9 @@ from base58 import b58decode, b58encode
 from nacl.signing import SigningKey
 
 from enum import Enum, auto
+from src.blockchain import get_wallet_contents  # TODO: move to this module
+from src.token_addresses import SOL
+from src.blockchain import get_jupiter_quote_with_backoff
 
 
 class WalletType(Enum):
@@ -172,3 +177,40 @@ def get_wallet_address(
         return wallet["public_key"]
     else:
         raise ValueError("Unsupported wallet type.")
+
+
+async def get_total_wallet_value(
+    wallet_address: str, token_threshold: int = 100_000, max_tokens: int = 15
+) -> int:
+    """
+    Utility function that will calculate the total value of a wallet. Sleeps for 1s between calls
+    Args:
+        wallet_address (str): address for the wallet
+        token_threshold (int): Skips trying to find value of tokens where amount is below this theshold (to avoid too many API calls)
+        max_tokens (int): Will truncate after max_tokens to save time.
+    """
+    contents = await get_wallet_contents(wallet_address)
+    total_spl_tokens = len(contents.keys()) - 1
+    if total_spl_tokens > token_threshold:
+        logging.warning(
+            f"Total value may be inaccurate, wallet contains {total_spl_tokens} tokens. Returning first {max_tokens}!"
+        )
+    total_lamports = 0
+    token_count = 0
+    for token in contents.keys():
+        if token_count >= max_tokens:
+            return total_lamports
+        if token == SOL:
+            total_lamports += contents.get(token, {}).get("raw_amount", 0)
+        else:
+            amount = contents.get(token, {}).get("raw_amount")
+            if amount < token_threshold:  # skip if this looks like dust
+                continue
+            quote = await get_jupiter_quote_with_backoff(
+                input_mint=token, output_mint=SOL, amount=amount
+            )
+            if quote:
+                token_count += 1
+                total_lamports += int(quote.get("outAmount", 0))
+        await asyncio.sleep(1.0)
+    return total_lamports
