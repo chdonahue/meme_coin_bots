@@ -56,7 +56,6 @@ class WalletListener:
                         "params": [params, {"commitment": "finalized"}],
                     }
                     await ws.send(json.dumps(sub_req))
-                    logging.info(f"✅ Subscribed ({method}) to wallet: {wallet}")
 
                     # Only backfill if this wallet has already seen at least one live signature
                     if self.backfill_enabled[wallet]:
@@ -70,9 +69,6 @@ class WalletListener:
                                 ws.recv(), timeout=120
                             )  # Reconnect if not getting a connection
                         except asyncio.TimeoutError:
-                            logging.warning(
-                                f"🕒 WebSocket recv() timeout for {wallet}, reconnecting..."
-                            )
                             break  # exit to reconnect
                         logging.debug(
                             f"[{wallet}] Received raw ws message: {response[:100]}"
@@ -155,9 +151,6 @@ class WalletListener:
 
                 # Log heartbeat every `heartbeat_interval` seconds
                 if time.time() - last_heartbeat > heartbeat_interval:
-                    logging.info(
-                        "💓 Listener heartbeat: still alive and checking queues..."
-                    )
                     last_heartbeat = time.time()
 
                 await asyncio.sleep(0.05)
