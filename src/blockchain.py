@@ -669,20 +669,23 @@ async def swap_tokens(
     Returns:
         transaction_dict (dict): Dictionary with Signature and quote
     """
-    transaction_dict = {}
     try:
         quote = await get_jupiter_quote(input_mint, output_mint, amount, slippage_bps)
+        if not quote or "outAmount" not in quote:
+            logging.warning("Quote unavailable or invalid.")
+            return None
         tx_data = await get_swap_transaction(quote, wallet_keypair, prioritization_fee)
+        if not tx_data or "swapTransaction" not in tx_data:
+            logging.warning("Swap transaction data invalid.")
+            return None
         serialized_tx = tx_data["swapTransaction"]
         signature = await execute_transaction(serialized_tx, wallet_keypair)
         if not signature:
             logging.info("❌ Preflight failed")
             return None
+        return {"signature": signature, "quote": quote}
     except Exception as e:
         logging.info(f"[Error] Transaction build/execute failed: {e}")
-    transaction_dict["signature"] = signature
-    transaction_dict["quote"] = quote
-    return transaction_dict
 
 
 async def retry_swap_tokens(
@@ -712,19 +715,18 @@ async def retry_swap_tokens(
     """
 
     for i in range(max_retries):
-        try:
-            return await swap_tokens(
-                input_mint=input_mint,
-                output_mint=output_mint,
-                amount=amount,
-                wallet_keypair=wallet_keypair,
-                slippage_bps=slippage_bps,
-                prioritization_fee=prioritization_fee,
-            )
-        except Exception as e:
-            logging.info(f"[WARN] Swap failed (attempt {i+1}): {e}")
-            await asyncio.sleep(retry_delay * (2**i) + random.uniform(0, 1))
-            slippage_bps = int(
-                slippage_bps * 1.25
-            )  # optionally increase slippage each try
+        result = await swap_tokens(
+            input_mint=input_mint,
+            output_mint=output_mint,
+            amount=amount,
+            wallet_keypair=wallet_keypair,
+            slippage_bps=slippage_bps,
+            prioritization_fee=prioritization_fee,
+        )
+        if result is not None:
+            return result
+        logging.warning(f"[WARN] Swap failed (attempt {i+1})")
+        await asyncio.sleep(retry_delay * (2**i) + random.uniform(0, 1))
+        slippage_bps = min(int(slippage_bps * 1.25), 10000)
+
     raise Exception(f"Swap failed after {max_retries} attempts.")
