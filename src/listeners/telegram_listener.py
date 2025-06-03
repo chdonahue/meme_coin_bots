@@ -1,6 +1,7 @@
 import asyncio
 import os
 import logging
+import inspect
 from typing import Callable, List, Optional
 
 from telethon import TelegramClient, events
@@ -53,7 +54,12 @@ class TelegramListener:
                     "sender_id": event.sender_id,
                     "timestamp": event.message.date.isoformat(),
                 }
-                self.on_message(message_data)
+                if inspect.iscoroutinefunction(
+                    self.on_message
+                ):  # allow flexibility if async
+                    await self.on_message(message_data)
+                else:
+                    self.on_message(message_data)
             except Exception as e:
                 logging.error(f"Error in message handler: {e}")
 
