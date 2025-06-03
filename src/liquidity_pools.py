@@ -11,6 +11,7 @@ from src.blockchain import get_helius_url, post_json, get_jupiter_quote
 from src.token_addresses import SOL, USDC
 from solders.pubkey import Pubkey
 from statistics import median
+import logging
 
 
 # Raydium lists tokens in alphabetical order instead of by base priority, so this is to highlight which ones I want to be the base mint
@@ -84,12 +85,15 @@ async def estimate_liquidity(token_address, input_token=SOL):
         10,
     ]  # These are points at which to sample the AMM curve
     for amount in input_amounts:
-        amount = int(amount * 10**9)  # convert to lamports
-        quote = await get_jupiter_quote(input_token, token_address, amount=amount)
-        slippage = float(quote.get("priceImpactPct", 0.0))
-        if 0.001 < slippage < 0.10:  # Only look at 0.1% to 10% slippage
-            liquidity = int(quote["inAmount"]) / float(quote["priceImpactPct"])
-            estimates.append(liquidity)
+        lamports = int(amount * 10**9)  # convert to lamports
+        try:
+            quote = await get_jupiter_quote(input_token, token_address, amount=lamports)
+            slippage = float(quote.get("priceImpactPct", 0.0))
+            if 0.001 < slippage < 0.10:  # Only look at 0.1% to 10% slippage
+                liquidity = int(quote["inAmount"]) / float(quote["priceImpactPct"])
+                estimates.append(liquidity)
+        except Exception as e:
+            logging.warning(f"[estimate_liquidity] Failed")
     if not estimates:
         return None  # Can't find liquidity
     return median(estimates) * 2  # get double-sided liquidity similar to dexscreener
