@@ -3,11 +3,6 @@ For building strategies where one must track the balance of a strategy
 """
 
 import logging
-import datetime
-import asyncio
-from src.wallet.wallet_manager import WalletManager
-from src.wallet.wallet import get_total_wallet_value
-from src.blockchain import get_wallet_contents
 
 
 class PositionManager:
