@@ -57,7 +57,7 @@ class WalletManager:
         return contents.get(mint, {}).get("raw_amount", 0)
 
     async def get_total_value(
-        self, token_threshold: int = 100_000, max_tokens: int = 15
+        self, token_threshold: int = 100_000, max_tokens: int = 10
     ) -> int:
         """
         Get the total value of the wallet in lamports
