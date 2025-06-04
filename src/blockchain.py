@@ -524,7 +524,7 @@ async def get_jupiter_quote(
     Returns:
         quote (dict): Quote data with all relevant information.
     """
-    url = "https://quote-api.jup.ag/v6/quote"
+    url = "https://lite-api.jup.ag/swap/v1/quote"
     params = {
         "inputMint": input_mint,
         "outputMint": output_mint,
@@ -580,7 +580,7 @@ async def get_swap_transaction(
     Returns:
         Dict[str, Any]: Transaction data with serialized transaction
     """
-    swap_url = "https://quote-api.jup.ag/v6/swap"
+    swap_url = "https://lite-api.jup.ag/swap/v1/swap"
 
     payload = {
         "quoteResponse": quote,
