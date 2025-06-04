@@ -538,9 +538,15 @@ async def get_jupiter_quote(
 
 
 async def get_jupiter_quote_with_backoff(
-    input_mint: str, output_mint: str, amount: int, slippage_bps: int = 100
+    input_mint: str,
+    output_mint: str,
+    amount: int,
+    slippage_bps: int = 100,
+    retries: int = 4,
 ):
-    retries = 3
+    """
+    Gets a jupiter quote with retries and exponential backoff
+    """
     for i in range(retries):
         try:
             return await get_jupiter_quote(
@@ -552,8 +558,10 @@ async def get_jupiter_quote_with_backoff(
                 logging.info(f"[WARN] Rate limit hit. Retrying in {wait_time}s...")
                 await asyncio.sleep(wait_time)
             elif e.response.status_code == 400:  # bad quote
-                logging.info("Token pair doesn't seem to be available for quote")
-                return None
+                logging.info(
+                    f"Token pair {input_mint}:{output_mint} doesn't seem to be available for quote"
+                )
+                break
             else:
                 raise
 
