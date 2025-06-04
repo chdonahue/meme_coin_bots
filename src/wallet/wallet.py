@@ -180,10 +180,10 @@ def get_wallet_address(
 
 
 async def get_total_wallet_value(
-    wallet_address: str, token_threshold: int = 100_000, max_tokens: int = 15
+    wallet_address: str, token_threshold: int = 100_000, max_tokens: int = 10
 ) -> int:
     """
-    Utility function that will calculate the total value of a wallet. Sleeps for 1s between calls
+    Utility function that will calculate the total value of a wallet. Sleeps for 2s between calls
     Args:
         wallet_address (str): address for the wallet
         token_threshold (int): Skips trying to find value of tokens where amount is below this theshold (to avoid too many API calls)
@@ -212,5 +212,5 @@ async def get_total_wallet_value(
             if quote:
                 token_count += 1
                 total_lamports += int(quote.get("outAmount", 0))
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(2.0)
     return total_lamports
