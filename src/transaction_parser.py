@@ -286,7 +286,7 @@ def extract_swap_data(
             "output_amount": output_tx.output_amount,
         }
 
-    return {}
+    return None
 
 
 def extract_new_token_mint(tx_json: dict) -> str | None:
