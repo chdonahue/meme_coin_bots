@@ -3,6 +3,11 @@ For building strategies where one must track the balance of a strategy
 """
 
 import logging
+import datetime
+import asyncio
+from src.wallet.wallet_manager import WalletManager
+from src.wallet.wallet import get_total_wallet_value
+from src.blockchain import get_wallet_contents
 
 
 class PositionManager:
@@ -74,17 +79,3 @@ class PositionManager:
             del self.positions[token]
         else:
             logging.info(f"Token {token} not detected in holdings. Skipping SWAP")
-
-
-class ProportionalPositionManager(PositionManager):
-    """
-    This uses a proportional strategy to manage the bot's positions. The user can define a total amount of SOL to initialize,
-    the maximum number of concurrent positions, and the maximum SOL to use per position.
-    It will query the copy wallet and trade proportionally based on your wallet's allocation.
-    NOTE: Perhaps it should have no maximum for positions (but I kinda like this otherwise you can end up with junk)
-    """
-
-    pass
-    # def __init__(self, wallet_tracker, sol_balance: float, max_positions=10):
-    #     super().__init__(initial_sol=sol_balance, max_positions=max_positions)
-    #     self.wallet_tracker = wallet_tracker  # Object that tells you target wallet positions THIS SHOULD BE A WALLET OBJECT NOT THE TRACKER
