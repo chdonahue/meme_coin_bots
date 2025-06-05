@@ -68,12 +68,20 @@ class WalletListener:
                             response = await asyncio.wait_for(
                                 ws.recv(), timeout=120
                             )  # Reconnect if not getting a connection
-                        except asyncio.TimeoutError:
-                            break  # exit to reconnect
-                        logging.debug(
-                            f"[{wallet}] Received raw ws message: {response[:100]}"
-                        )
-                        data = json.loads(response)
+                        except (
+                            asyncio.TimeoutError,
+                            websockets.exceptions.ConnectionClosedError,
+                            websockets.exceptions.ConnectionClosedOK,
+                        ) as e:
+                            break  # triggers outer reconnect loop
+
+                        try:
+                            data = json.loads(response)
+                        except json.JSONDecodeError as e:
+                            logging.warning(
+                                f"[{wallet}] Malformed JSON in message: {e}"
+                            )
+                            continue
 
                         if "params" not in data:
                             continue
