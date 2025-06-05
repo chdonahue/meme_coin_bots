@@ -46,15 +46,11 @@ class PositionManager:
         """
         This tracks balances for new SOL
         Returns the allocation for the position in SOL
-        NOTE: this will fail if we already have a position and the person is edging in.
         """
         if (
             token in self.positions or not self.can_trade()
         ):  # do not add if already in positions or if can't trade
             logging.info(
-                f"Skipping allocation of {token} to position manager. No funds, slots, or token is already in holdings"
-            )
-            print(
                 f"Skipping allocation of {token} to position manager. No funds, slots, or token is already in holdings"
             )
             return None
