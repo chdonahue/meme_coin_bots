@@ -37,6 +37,7 @@ class QuotePoller:
         input_amount (int): The number of input tokens to trade (base units)
         duration_s (float): Duration to run polling
         quote_func (function): Usually will be get_jupiter_quote()
+        quote_queue (Queue): Holds a queue that can be used to pass quotes
         save_callback (function): Option to save data TODO: implement database saving here
         min_quote_interval (float): Minimum interval to poll
         max_quote_interval (float): Maximum interval to poll
@@ -48,7 +49,7 @@ class QuotePoller:
         output_mint: str,
         input_amount: int,
         duration_s: float,
-        quote_queue: asyncio.Queue[dict] = None,
+        quote_queue: Optional[asyncio.Queue] = None,
         quote_func: Callable[[str, str, int], dict] = None,
         save_callback: Optional[Callable[[dict], None]] = None,
         min_quote_interval: float = 30,
@@ -77,15 +78,16 @@ class QuotePoller:
                 data = {
                     "timestamp": datetime.now(UTC),
                     "input_mint": self.input_mint,
+                    "input_amount": self.input_amount,
                     "output_mint": self.output_mint,
                     "output_amount": int(quote["outAmount"]),
+                    "price_impact_pct": float(quote["priceImpactPct"]),
                 }
                 if self.save_callback:
                     await self.save_callback(data)
+                if self.quote_queue:
+                    await self.quote_queue.put(data)  # Put the quote into the queue
                 logging.debug(
-                    f"[QuotePoller {data['timestamp']}]: Quote: {data['input_mint']}:{self.input_amount} -> {data['output_mint']}:{data['output_amount']}"
-                )
-                print(
                     f"[QuotePoller {data['timestamp']}]: Quote: {data['input_mint']}:{self.input_amount} -> {data['output_mint']}:{data['output_amount']}"
                 )
                 # Save quote...
