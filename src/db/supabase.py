@@ -86,25 +86,56 @@ async def test_supabase_connection():
         return False
 
 
-async def load_quotes_from_supabase(dsn: str) -> pd.DataFrame:
+async def load_quotes_from_supabase() -> pd.DataFrame:
     """
-    Connects to a Supabase PostgreSQL database and loads the entire quotes table as a Pandas DataFrame.
+    Connects to Supabase via REST API and loads the entire quotes table as a Pandas DataFrame.
     """
-    pool = await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5)
+    # Replace 'quotes' with your actual table name if different
+    table_name = "quotes"
 
-    async with pool.acquire() as conn:
-        records = await conn.fetch("SELECT * FROM quotes ORDER BY timestamp ASC")
+    # Supabase REST API endpoint for your table
+    url = f"{os.getenv('SUPABASE_URL')}/rest/v1/{table_name}"
 
-    await pool.close()
+    # Add query parameters for ordering
+    params = {
+        "order": "timestamp.asc",  # Order by timestamp ascending
+        "select": "*",  # Select all columns
+    }
 
-    # Convert asyncpg Record objects into a list of dictionaries
-    rows = [dict(record) for record in records]
+    headers = {
+        "apikey": os.getenv("SUPABASE_KEY"),
+        "Authorization": f"Bearer {os.getenv('SUPABASE_KEY')}",
+        "Content-Type": "application/json",
+    }
 
-    # Convert to DataFrame
-    df = pd.DataFrame(rows)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params) as response:
 
-    # Optional: parse timestamps if needed
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+                if response.status == 200:
+                    # Get JSON data
+                    data = await response.json()
 
-    return df
+                    # Convert to DataFrame
+                    df = pd.DataFrame(data)
+
+                    # Optional: parse timestamps if needed
+                    if "timestamp" in df.columns and not df.empty:
+                        df["timestamp"] = pd.to_datetime(df["timestamp"])
+
+                    print(f"✅ Loaded {len(df)} rows from Supabase")
+                    return df
+
+                else:
+                    response_text = await response.text()
+                    print(
+                        f"❌ Error loading from Supabase: {response.status} - {response_text}"
+                    )
+                    return pd.DataFrame()  # Return empty DataFrame on error
+
+    except Exception as e:
+        print(f"❌ Exception loading from Supabase: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return pd.DataFrame()  # Return empty DataFrame on error
