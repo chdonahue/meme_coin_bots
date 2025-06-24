@@ -9,7 +9,7 @@ import sys
 from functools import partial
 from src.blockchain import get_jupiter_quote
 from src.polling.quote_poller import QuotePoller
-from src.db.supabase import save_quote_to_supabase, get_supabase_pool
+from src.db.supabase import save_quote_to_supabase  # , get_supabase_pool
 from src.token_addresses import SOL, USDC
 
 
@@ -33,7 +33,7 @@ async def main():
 
     try:
         quote_queue = asyncio.Queue()
-        pool = await get_supabase_pool()
+        # pool = await get_supabase_pool()
 
         poller = QuotePoller(
             input_mint=SOL,
@@ -43,7 +43,7 @@ async def main():
             min_quote_interval=3600,  # fixed to 1hr intervals
             max_quote_interval=3600,
             quote_queue=quote_queue,
-            save_callback=partial(save_quote_to_supabase, pool=pool),
+            save_callback=partial(save_quote_to_supabase),  # , pool=pool),
         )
         await poller.start()
     except Exception as e:
