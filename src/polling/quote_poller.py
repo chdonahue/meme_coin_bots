@@ -38,7 +38,7 @@ class QuotePoller:
         duration_s (float): Duration to run polling
         quote_func (function): Usually will be get_jupiter_quote()
         quote_queue (Queue): Holds a queue that can be used to pass quotes
-        save_callback (function): Option to save data TODO: implement database saving here
+        save_callback (function): Option to save data
         min_quote_interval (float): Minimum interval to poll
         max_quote_interval (float): Maximum interval to poll
     """
@@ -48,7 +48,7 @@ class QuotePoller:
         input_mint: str,
         output_mint: str,
         input_amount: int,
-        duration_s: float,
+        duration_s: Optional[float] = None,
         quote_queue: Optional[asyncio.Queue] = None,
         quote_func: Callable[[str, str, int], dict] = None,
         save_callback: Optional[Callable[[dict], None]] = None,
@@ -68,7 +68,10 @@ class QuotePoller:
         self.running = True
 
     async def start(self):
-        while (datetime.now(UTC) - self.start_time).total_seconds() < self.duration_s:
+        while (
+            self.duration_s is None
+            or (datetime.now(UTC) - self.start_time).total_seconds() < self.duration_s
+        ):
             if not self.running:
                 break
             try:
@@ -94,14 +97,22 @@ class QuotePoller:
             except Exception as e:
                 logging.warning(f"[QuotePoller] Error: {e}")
 
-            elapsed_s = (datetime.now(UTC) - self.start_time).total_seconds()
-            interval = get_interval(
-                elapsed_seconds=elapsed_s,
-                total_seconds=self.duration_s,
-                min_interval=self.min_quote_interval,
-                max_interval=self.max_quote_interval,
-            )
+            if self.duration_s is not None:
+                elapsed_s = (datetime.now(UTC) - self.start_time).total_seconds()
+                interval = get_interval(
+                    elapsed_seconds=elapsed_s,
+                    total_seconds=self.duration_s,
+                    min_interval=self.min_quote_interval,
+                    max_interval=self.max_quote_interval,
+                )
+            else:
+                # For infinite duration, just use the min_quote_interval
+                interval = self.min_quote_interval
             await asyncio.sleep(interval)
+
+    def stop(self):
+        """Method to gracefully stop the poller"""
+        self.running = False
 
 
 async def main():
