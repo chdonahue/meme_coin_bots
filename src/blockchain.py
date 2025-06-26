@@ -2,6 +2,7 @@
 Contains functions used for solana blockchain interactions.
 """
 
+import os
 import requests
 import asyncio
 import random
@@ -738,3 +739,21 @@ async def retry_swap_tokens(
         slippage_bps = min(int(slippage_bps * 1.25), 10000)
 
     raise Exception(f"Swap failed after {max_retries} attempts.")
+
+
+async def get_token_metadata(mint_address: str) -> dict:
+    """
+    Gets token metadata using the Helius API.
+
+    Args:
+        mint_address: token address
+
+    Returns:
+        data (dict): Dictionary containing token metadata
+    """
+    api_key = os.getenv("HELIUS_API_KEY")
+    url = f"https://api.helius.xyz/v0/tokens/metadata?api-key={api_key}"
+    response = requests.post(url, json={"mintAccounts": [mint_address]})
+    response.raise_for_status()
+    data = response.json()
+    return data[0] if data else {}
