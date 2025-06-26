@@ -1,8 +1,9 @@
-import asyncpg
 import os
+import aiohttp
+import logging
 import pandas as pd
 from dotenv import load_dotenv
-import aiohttp
+from datetime import datetime
 
 load_dotenv()
 
@@ -34,21 +35,25 @@ async def save_quote_to_supabase(data):
             async with session.post(url, json=data, headers=headers) as response:
 
                 if response.status in [200, 201]:
-                    print(f"Successfully saved quote data to Supabase")
+                    now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+                    logging.info(f"{now} Successfully saved quote data to Supabase")
                     return response
                 else:
                     response_text = await response.text()
-                    print(
+                    logging.warning(
                         f"Error saving to Supabase: {response.status} - {response_text}"
                     )
                     return None
 
     except Exception as e:
-        print(f"Exception saving to Supabase: {e}")
+        logging.warning(f"Exception saving to Supabase: {e}")
         return None
 
 
 async def save_token_metadata_to_supabase(data: dict):
+    """
+    Saves the token metadata dict from helius to the supabase schema
+    """
     table_name = "token_metadata"
     url = f"{os.getenv('SUPABASE_URL')}/rest/v1/{table_name}"
     headers = {
@@ -90,14 +95,16 @@ async def save_token_metadata_to_supabase(data: dict):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=row, headers=headers) as response:
                 if response.status in [200, 201]:
-                    print(f"✅ Saved metadata for {mint}")
+                    logging.info(f"✅ Saved metadata for {mint}")
                     return response
                 else:
                     response_text = await response.text()
-                    print(f"[!] Supabase error: {response.status} - {response_text}")
+                    logging.warning(
+                        f"[!] Supabase error: {response.status} - {response_text}"
+                    )
                     return None
     except Exception as e:
-        print(f"[!] Exception saving metadata: {e}")
+        logging.warning(f"[!] Exception saving metadata: {e}")
         return None
 
 

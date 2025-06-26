@@ -9,7 +9,7 @@ import sys
 from functools import partial
 from src.blockchain import get_jupiter_quote
 from src.polling.quote_poller import QuotePoller
-from src.db.supabase import save_quote_to_supabase  # , get_supabase_pool
+from src.db.supabase import save_quote_to_supabase
 from src.token_addresses import SOL, USDC
 
 
