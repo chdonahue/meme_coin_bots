@@ -73,9 +73,9 @@ async def handle_new_token(token_address: str):
             output_mint=token_address,
             input_amount=1_000_000_000,  # 1 SOL
             quote_func=get_jupiter_quote,
-            min_quote_interval=20,  # 20s (need to stay under free API limits)
+            min_quote_interval=15,  # 15s (need to stay under free API limits)
             max_quote_interval=60 * 20,  # max of every 20 minutes
-            duration_s=3600 * 8,  # 8 hours
+            duration_s=3600 * 10,  # 10 hours
             quote_queue=quote_queue,
             save_callback=partial(save_quote_to_supabase),
         )
