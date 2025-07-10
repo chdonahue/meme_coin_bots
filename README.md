@@ -7,13 +7,13 @@
 [![Jupiter](https://img.shields.io/badge/Jupiter-00D4AA?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMjJDMTcuNTIyOCAyMiAyMiAxNy41MjI4IDIyIDEyQzIyIDYuNDc3MTUgMTcuNTIyOCAyIDEyIDJDNi40NzcxNSAyIDIgNi40NzcxNSAyIDEyQzIgMTcuNTIyOCA2LjQ3NzE1IDIyIDEyIDIyWiIgZmlsbD0iIzAwRDRBQSIvPjwvc3ZnPg==)](https://jup.ag)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=for-the-badge)](https://github.com/psf/black)
 
-*Automated trading infrastructure for Solana meme coins with real-time monitoring, copy trading capabilities, and sophisticated risk management.*
+*Automated trading infrastructure for Solana meme coins with real-time monitoring, copy trading capabilities, and risk management.*
 
 </div>
 
 ## 📊 Overview
 
-A comprehensive trading bot ecosystem designed for the fast-paced world of Solana meme coins. This project implements multiple trading strategies, real-time market monitoring, and robust risk management across hierarchical deterministic wallet structures.
+This project implements multiple trading strategies, real-time market monitoring, and robust risk management.
 
 
 
@@ -52,10 +52,6 @@ A comprehensive trading bot ecosystem designed for the fast-paced world of Solan
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/meme-coin-trading-bots.git
-cd meme-coin-trading-bots
-
 # Create and activate virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -71,7 +67,7 @@ pre-commit install
 
 1. **Environment Setup**:
 ```bash
-# Edit .env with your API keys and wallet configurations
+# Edit .env with your API keys and mnemonic phrases (see below)
 ```
 
 2. **Generate Wallet Mnemonic**:
