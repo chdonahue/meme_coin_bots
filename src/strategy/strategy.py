@@ -6,13 +6,20 @@ import time
 import re
 import asyncio
 import logging
-from pynput.keyboard import Listener
 import threading
 from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, List
 from src.token_addresses import SOL
 from src.blockchain import get_jupiter_quote
+
+try:
+    # `pynput` needs a working display on Linux. On head‑less servers this may
+    # raise either ImportError or an X‑backend error.
+    from pynput.keyboard import Listener
+except Exception as e:  # noqa: BLE001  (catch‑all is intentional here)
+    Listener = None  # type: ignore
+    logging.debug(f"Keyboard listener disabled: {e}")
 
 
 @dataclass
