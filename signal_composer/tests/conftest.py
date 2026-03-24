@@ -1,5 +1,11 @@
 # signal_composer/tests/conftest.py
+import sys
+from pathlib import Path
+
 import pytest
+
+# Add src directory to path for imports - must happen before test collection
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 @pytest.fixture
