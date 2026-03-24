@@ -72,6 +72,142 @@ Derived streams are private to each strategy in MVP. Future: shareable indicator
 
 ---
 
+## Wallet Connection & Custody Model
+
+A critical trust component: users must feel confident their funds are safe. SignalComposer uses a **non-custodial smart contract model** - the platform never has access to user funds.
+
+### Custody Options (Why We Chose Smart Contracts)
+
+| Option | How It Works | Trust Level | Our Choice |
+|--------|--------------|-------------|------------|
+| Platform Custody | User sends funds to platform wallet | ❌ Must trust platform completely | No |
+| Delegated Signing | User grants platform permission to sign | ⚠️ Platform could drain wallet | No |
+| Smart Contract Escrow | Funds held in auditable contract | ✅ Trustless, verifiable | **Yes** |
+
+### MVP: Auth-Only Wallet Connection
+
+In Phase 1 (paper trading), wallet connection is for **authentication only**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      USER WALLET                                 │
+│                  (Phantom, Solflare, etc.)                       │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              │ 1. Sign message: "Sign in to SignalComposer"
+                              │    (proves wallet ownership)
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SIGNALCOMPOSER API                            │
+│                                                                  │
+│  - Verify signature matches wallet address                      │
+│  - Create/lookup user account                                   │
+│  - Issue session token                                          │
+│  - NO funds move, NO permissions granted                        │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Auth Flow (SIWS - Sign In With Solana):**
+1. User clicks "Connect Wallet"
+2. Wallet prompts: "Sign this message to prove you own this wallet"
+3. User signs (no transaction, no fees, no permissions)
+4. Backend verifies signature, creates session
+5. User is authenticated by wallet address
+
+### Phase 2: Smart Contract Escrow Pools
+
+When real capital is involved, funds go to **strategy-specific smart contracts**, not platform wallets:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      USER WALLET                                 │
+│                  (Phantom, Solflare, etc.)                       │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              │ 1. User deposits SOL/USDC
+                              │    (on-chain transaction to contract)
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              STRATEGY POOL CONTRACT (PDA)                        │
+│                                                                  │
+│  Owner: Program (NOT platform!)                                 │
+│  Depositors: [user1: 30%, user2: 25%, creator: 45%]            │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                   ALLOWED OPERATIONS                         ││
+│  ├─────────────────────────────────────────────────────────────┤│
+│  │  deposit(amount)                                             ││
+│  │    → Anyone can deposit                                      ││
+│  │    → Mints proportional shares to depositor                  ││
+│  │                                                              ││
+│  │  withdraw(shares)                                            ││
+│  │    → Only returns funds to ORIGINAL depositor                ││
+│  │    → Burns shares, sends proportional pool value             ││
+│  │                                                              ││
+│  │  execute_swap(input_mint, output_mint, amount)               ││
+│  │    → ONLY callable by "executor" role (platform)             ││
+│  │    → ONLY routes through Jupiter (whitelisted)               ││
+│  │    → Tokens stay in pool, just different assets              ││
+│  │                                                              ││
+│  │  ❌ NO arbitrary transfer function                           ││
+│  │  ❌ NO way to send funds to platform wallet                  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              │ 2. Platform triggers trade
+                              │    (strategy says "buy BONK")
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      JUPITER DEX                                 │
+│              (Swap executes, tokens return to pool)              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Trust Guarantees
+
+| Concern | How Smart Contracts Solve It |
+|---------|------------------------------|
+| "Platform could steal funds" | Contract has no function to send funds to platform |
+| "Platform could make bad trades" | Worst case: bad trades (recoverable), not theft |
+| "How do I verify this?" | Contract code is open-source, audited, on-chain |
+| "What if platform disappears?" | Users can still withdraw directly from contract |
+
+### Contract Security Model
+
+**Program Derived Addresses (PDAs):**
+- Each strategy pool is a PDA - an address controlled by the program, not any private key
+- No human has the private key to the pool
+- Only the program's code can authorize transactions
+
+**Role-Based Access:**
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        ROLE PERMISSIONS                       │
+├──────────────┬───────────────────────────────────────────────┤
+│  Anyone      │ deposit(), view balances                      │
+│  Depositor   │ withdraw() their own funds only               │
+│  Executor    │ execute_swap() via whitelisted DEXs           │
+│  Admin       │ pause() in emergency, upgrade (timelocked)    │
+└──────────────┴───────────────────────────────────────────────┘
+```
+
+**Emergency Controls:**
+- Pause functionality if exploit detected
+- Timelock on any admin changes (users can exit before changes take effect)
+- No "rug pull" functions in contract
+
+### Wallet UX Summary
+
+| Phase | Wallet Interaction | Funds Move? | Trust Required |
+|-------|-------------------|-------------|----------------|
+| MVP (Paper) | Sign message to authenticate | No | Minimal (just auth) |
+| Phase 2 | Deposit to strategy contract | Yes, to contract | Trust audited contract |
+| Withdrawal | Call withdraw() on contract | Yes, back to user | None (permissionless) |
+
+---
+
 ## Strategy DSL Specification
 
 ### Full Example
