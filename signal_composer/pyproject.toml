@@ -2,7 +2,7 @@
 name = "signal-composer"
 version = "0.1.0"
 description = "Composable trading strategy marketplace"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
     "httpx>=0.25",
