@@ -3,6 +3,7 @@
 from .portfolio import Portfolio, Position, InsufficientFundsError, InsufficientPositionError
 from .executor import PaperTradeExecutor, TradeRecord
 from .metrics import PerformanceCalculator, PerformanceSnapshot
+from .backtest import BacktestEngine, BacktestResult
 
 __all__ = [
     "Portfolio",
@@ -13,4 +14,6 @@ __all__ = [
     "TradeRecord",
     "PerformanceCalculator",
     "PerformanceSnapshot",
+    "BacktestEngine",
+    "BacktestResult",
 ]
