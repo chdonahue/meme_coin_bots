@@ -160,6 +160,51 @@ async def cmd_backtest(args: argparse.Namespace) -> int:
                     f"  {trade.timestamp.strftime('%Y-%m-%d %H:%M')} | {trade.action.value.upper():8} | {trade.token} | ${trade.amount:.2f} @ ${trade.price_at_exec:.2f}"
                 )
 
+        if args.save:
+            import json
+            from .db.connection import get_session
+            from .db.repositories.strategy_repository import StrategyRepository
+            from .db.repositories.trade_repository import TradeRepository
+            from .db.repositories.performance_repository import PerformanceRepository
+            from .db.repositories.user_repository import UserRepository
+            from .simulation.persistence import SimulationPersistence
+
+            async def save_results():
+                async with get_session() as session:
+                    # Get or create user (placeholder wallet for CLI)
+                    user_repo = UserRepository(session)
+                    user = await user_repo.get_or_create("cli_user_local")
+
+                    # Get or create strategy
+                    strategy_repo = StrategyRepository(session)
+                    db_strategy = await strategy_repo.get_by_external_id(strategy.id)
+
+                    if not db_strategy:
+                        from .db.models import Strategy as StrategyModel
+
+                        # Read the original JSON file
+                        strategy_json = json.loads(args.file.read_text())
+                        db_strategy = StrategyModel(
+                            external_id=strategy.id,
+                            creator_id=user.id,
+                            name=strategy.name,
+                            description=strategy.description or "",
+                            dsl_json=strategy_json,
+                            status="active",
+                        )
+                        db_strategy = await strategy_repo.create(db_strategy)
+
+                    # Save results
+                    trade_repo = TradeRepository(session)
+                    perf_repo = PerformanceRepository(session)
+                    persistence = SimulationPersistence(trade_repo, perf_repo)
+                    await persistence.save_backtest_result(db_strategy.id, result)
+
+                    await session.commit()
+                    print(f"\nResults saved to database (strategy_id={db_strategy.id})")
+
+            await save_results()
+
         return 0
 
     except ParseError as e:
@@ -202,6 +247,11 @@ def main() -> int:
         "--slippage", type=int, default=100, help="Slippage in basis points (default: 100)"
     )
     backtest_parser.add_argument("-v", "--verbose", action="store_true", help="Show trade log")
+    backtest_parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save results to database",
+    )
 
     args = parser.parse_args()
 
