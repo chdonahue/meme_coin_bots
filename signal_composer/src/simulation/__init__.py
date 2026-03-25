@@ -2,6 +2,7 @@
 
 from .portfolio import Portfolio, Position, InsufficientFundsError, InsufficientPositionError
 from .executor import PaperTradeExecutor, TradeRecord
+from .metrics import PerformanceCalculator, PerformanceSnapshot
 
 __all__ = [
     "Portfolio",
@@ -10,4 +11,6 @@ __all__ = [
     "InsufficientPositionError",
     "PaperTradeExecutor",
     "TradeRecord",
+    "PerformanceCalculator",
+    "PerformanceSnapshot",
 ]
