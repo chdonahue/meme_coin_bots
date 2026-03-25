@@ -3,5 +3,6 @@
 from .base import BaseRepository
 from .user_repository import UserRepository
 from .strategy_repository import StrategyRepository
+from .trade_repository import TradeRepository
 
-__all__ = ["BaseRepository", "UserRepository", "StrategyRepository"]
+__all__ = ["BaseRepository", "UserRepository", "StrategyRepository", "TradeRepository"]
