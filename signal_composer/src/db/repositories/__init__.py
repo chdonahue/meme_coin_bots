@@ -1,5 +1,6 @@
 """Database repositories."""
 
 from .base import BaseRepository
+from .user_repository import UserRepository
 
-__all__ = ["BaseRepository"]
+__all__ = ["BaseRepository", "UserRepository"]
