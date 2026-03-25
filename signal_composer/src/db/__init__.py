@@ -1,7 +1,7 @@
 """Database module."""
 
 from .connection import get_session, init_db, drop_db
-from .models import User, Strategy, StrategyPerformance, PaperTrade, PriceData
+from .models import User, Strategy, StrategyPerformance, PaperTrade, PriceData, Portfolio
 
 __all__ = [
     "get_session",
@@ -12,4 +12,5 @@ __all__ = [
     "StrategyPerformance",
     "PaperTrade",
     "PriceData",
+    "Portfolio",
 ]

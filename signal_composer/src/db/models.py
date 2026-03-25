@@ -120,3 +120,26 @@ class PriceData(Base):
     source: Mapped[str] = mapped_column(String(20))
 
     __table_args__ = (Index("ix_price_token_time", "token", "timestamp"),)
+
+
+class Portfolio(Base):
+    """User's portfolio investment in a strategy."""
+
+    __tablename__ = "portfolios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    strategy_id: Mapped[int] = mapped_column(ForeignKey("strategies.id"), index=True)
+    shares_owned: Mapped[float] = mapped_column(Float, default=0.0)
+    entry_value: Mapped[float] = mapped_column(Float, default=0.0)  # Total invested
+    current_value: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (Index("ix_portfolio_user_strategy", "user_id", "strategy_id", unique=True),)
