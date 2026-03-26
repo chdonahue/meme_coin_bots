@@ -3,7 +3,6 @@
 import os
 import time
 import uuid
-from base64 import b64decode
 
 from solders.pubkey import Pubkey
 from solders.signature import Signature
