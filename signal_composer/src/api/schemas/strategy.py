@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StrategyCreate(BaseModel):
@@ -32,7 +32,7 @@ class StrategyResponse(BaseModel):
     external_id: str
     name: str
     description: str
-    dsl: dict[str, Any]
+    dsl: dict[str, Any] = Field(validation_alias="dsl_json")
     is_public: bool
     status: str
     created_at: datetime
