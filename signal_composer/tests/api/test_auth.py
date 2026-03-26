@@ -1,7 +1,6 @@
 """Tests for auth routes."""
 
 import pytest
-from unittest.mock import patch
 
 
 class TestAuthChallenge:
