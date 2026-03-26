@@ -49,14 +49,20 @@ src/api/
 Wallet auth uses challenge-response:
 
 1. **Request challenge:** `POST /auth/challenge { wallet_address }`
-   Returns: `{ challenge: "Sign this: nonce_timestamp" }`
+   Returns: `{ challenge: "signalcomposer:<nonce>:<timestamp>" }`
 
-2. **User signs** the challenge string with their Solana wallet
+2. **User signs** the challenge string with their Solana wallet (Ed25519)
 
 3. **Verify signature:** `POST /auth/verify { wallet_address, signature, challenge }`
    Server verifies Ed25519 signature, returns: `{ access_token: "jwt..." }`
 
 4. **Authenticated requests** include header: `Authorization: Bearer <jwt>`
+
+**Challenge security:**
+- Challenge format: `signalcomposer:<uuid4>:<unix_timestamp>`
+- Challenge TTL: 5 minutes (reject if timestamp too old)
+- Nonce stored in memory dict (or Redis in production) to prevent replay
+- Each nonce valid for single use only
 
 **JWT payload:**
 ```json
@@ -67,7 +73,9 @@ Wallet auth uses challenge-response:
 }
 ```
 
-**Token expiry:** 24 hours (configurable via `JWT_EXPIRY_HOURS` env var)
+**User ID derivation:** On verify, lookup user by wallet_address using `UserRepository.get_or_create()`. The returned `user.id` goes into JWT.
+
+**Token expiry:** 24 hours (configurable via `JWT_EXPIRY_HOURS` env var). No refresh tokens in v1 - user re-authenticates when expired.
 
 ## API Endpoints
 
@@ -140,11 +148,38 @@ class BacktestResponse(BaseModel):
     trade_count: int
     win_rate: float | None
     equity_curve: list[float]
+    saved: bool  # True if results were persisted
+```
+
+**Backtest behavior:** Results are persisted to database via `SimulationPersistence.save_backtest_result()`, which stores trades in `paper_trades` table and metrics in `strategy_performance` table. The performance history and trade list are then available via the GET endpoints.
+
+### Performance Response
+```python
+class PerformanceResponse(BaseModel):
+    id: int
+    date: datetime
+    total_return_pct: float
+    sharpe_ratio: float | None
+    max_drawdown_pct: float | None
+    trade_count: int
+    win_rate: float | None
+```
+
+### Trade Response
+```python
+class TradeResponse(BaseModel):
+    id: int
+    trigger_id: str
+    token: str
+    action: str  # "buy", "sell", "sell_all"
+    amount: float
+    price_at_exec: float
+    timestamp: datetime
 ```
 
 ### Pagination (for trades)
 ```python
-class PaginatedResponse(BaseModel):
+class PaginatedTradesResponse(BaseModel):
     items: list[TradeResponse]
     total: int
     page: int
@@ -171,7 +206,13 @@ class ErrorResponse(BaseModel):
 | 422 | Pydantic validation error |
 | 500 | Unexpected server error |
 
-### DSL Validation Error Example
+### DSL Validation
+DSL validation occurs on:
+- `POST /strategies` (create)
+- `PUT /strategies/{id}` (update)
+- `POST /strategies/{id}/backtest` (before running)
+
+Uses existing `engine.dsl.validator.validate_strategy()`. Returns 400 with error details:
 ```json
 {
   "error": "validation_error",
@@ -220,9 +261,12 @@ DATABASE_URL=postgresql+asyncpg://...
 
 # New
 JWT_SECRET=<random-secret-key>
-JWT_EXPIRY_HOURS=24
-CORS_ORIGINS=http://localhost:3000,https://yourdomain.com
+JWT_EXPIRY_HOURS=24                    # Default: 24
+CORS_ORIGINS=http://localhost:3000     # Comma-separated, default allows localhost:3000
+CHALLENGE_TTL_MINUTES=5                # Default: 5
 ```
+
+**Local development defaults:** If `CORS_ORIGINS` not set, defaults to `http://localhost:3000` for frontend dev.
 
 ## Run Command
 
