@@ -5,7 +5,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import auth, strategies, performance
+from src.api.routes import auth, strategies, performance, trades
 
 
 def get_cors_origins() -> list[str]:
@@ -33,6 +33,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(strategies.router)
 app.include_router(performance.router)
+app.include_router(trades.router)
 
 
 @app.get("/health")
