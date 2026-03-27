@@ -19,6 +19,8 @@ class TestCreateStrategy:
             "risk_rules": {
                 "stop_loss_pct": -10,
                 "max_position_pct": 50,
+                "max_trades_per_day": 10,
+                "slippage_limit_bps": 100,
             },
         }
 
