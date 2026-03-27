@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PerformanceResponse(BaseModel):
@@ -16,5 +16,4 @@ class PerformanceResponse(BaseModel):
     trade_count: int
     win_rate: float | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

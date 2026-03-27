@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class TradeResponse(BaseModel):
@@ -16,8 +16,7 @@ class TradeResponse(BaseModel):
     price_at_exec: float
     timestamp: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaginatedTradesResponse(BaseModel):
