@@ -1,6 +1,6 @@
 """Tests for token mapping."""
 
-from src.data.tokens import get_mint_address, TOKEN_MINTS
+from src.data.tokens import get_mint_address
 
 
 class TestGetMintAddress:
