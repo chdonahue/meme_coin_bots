@@ -1,11 +1,13 @@
 """FastAPI application."""
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes import auth, strategies, performance, trades
+from src.db.connection import init_db
 
 
 def get_cors_origins() -> list[str]:
@@ -14,10 +16,18 @@ def get_cors_origins() -> list[str]:
     return [o.strip() for o in origins.split(",")]
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on startup."""
+    await init_db()
+    yield
+
+
 app = FastAPI(
     title="SignalComposer API",
     description="Trading strategy management and backtesting",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS
