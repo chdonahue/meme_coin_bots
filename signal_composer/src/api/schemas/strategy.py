@@ -47,6 +47,7 @@ class BacktestRequest(BaseModel):
     days: int = 30
     initial_capital: float = 10000.0
     slippage_bps: int = 100
+    use_real_data: bool = True
 
 
 class BacktestResponse(BaseModel):
@@ -59,3 +60,4 @@ class BacktestResponse(BaseModel):
     win_rate: float | None
     equity_curve: list[float]
     saved: bool
+    data_source: str = "synthetic"
