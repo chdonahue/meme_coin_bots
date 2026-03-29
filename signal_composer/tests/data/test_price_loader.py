@@ -1,10 +1,11 @@
 """Tests for PriceDataLoader."""
 
+import pytest
 import tempfile
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch, MagicMock
 
 from src.data.loader import PriceDataLoader
 from src.data.sources.base import OHLCV
@@ -121,3 +122,83 @@ class TestDataTransformation:
         loader = PriceDataLoader()
         result = loader._transform_to_backtest_format([], "SOL")
         assert result == []
+
+
+class TestLoadPriceHistory:
+    """Test main load_price_history method."""
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_api_call(self):
+        """When cache exists, API is not called."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            loader = PriceDataLoader(cache_dir=tmpdir)
+
+            # Pre-populate cache
+            cached_data = [{"SOL": 185.0, "timestamp": "2025-03-27T12:00:00+00:00"}]
+            with patch.object(loader, "_build_cache_key", return_value="test_key"):
+                loader._write_cache("test_key", cached_data)
+
+                # Mock Birdeye to verify it's not called
+                mock_birdeye = AsyncMock()
+                loader._birdeye = mock_birdeye
+
+                result, source = await loader.load_price_history("SOL", "1H", 7)
+
+            assert source == "cache"
+            # Verify timestamp is deserialized to datetime
+            assert len(result) == 1
+            assert result[0]["SOL"] == 185.0
+            assert result[0]["timestamp"] == datetime(2025, 3, 27, 12, 0, tzinfo=timezone.utc)
+            mock_birdeye.get_ohlcv.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cache_miss_calls_api(self):
+        """When cache misses, API is called and result cached."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            loader = PriceDataLoader(cache_dir=tmpdir)
+
+            mock_ohlcv = [
+                OHLCV(
+                    token="So11111111111111111111111111111111111111112",
+                    open=180.0,
+                    high=185.0,
+                    low=178.0,
+                    close=183.5,
+                    volume=1000000,
+                    timestamp=datetime(2025, 3, 27, 12, 0, tzinfo=timezone.utc),
+                    source="birdeye",
+                ),
+            ]
+
+            mock_birdeye = AsyncMock()
+            mock_birdeye.get_ohlcv.return_value = mock_ohlcv
+            loader._birdeye = mock_birdeye
+
+            with patch.object(loader, "_build_cache_key", return_value="test_key"):
+                result, source = await loader.load_price_history("SOL", "1H", 7)
+
+            assert source == "birdeye"
+            assert len(result) == 1
+            assert result[0]["SOL"] == 183.5
+            mock_birdeye.get_ohlcv.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unknown_token_raises_error(self):
+        """Unknown token symbol raises ValueError."""
+        loader = PriceDataLoader()
+
+        with pytest.raises(ValueError, match="Unknown token"):
+            await loader.load_price_history("UNKNOWN_TOKEN", "1H", 7)
+
+    @pytest.mark.asyncio
+    async def test_api_returns_empty_raises_error(self):
+        """When API returns no data, raises ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            loader = PriceDataLoader(cache_dir=tmpdir)
+
+            mock_birdeye = AsyncMock()
+            mock_birdeye.get_ohlcv.return_value = []
+            loader._birdeye = mock_birdeye
+
+            with pytest.raises(ValueError, match="No price data available"):
+                await loader.load_price_history("SOL", "1H", 7)

@@ -71,3 +71,93 @@ class PriceDataLoader:
             }
             for candle in ohlcv_data
         ]
+
+    def _get_birdeye(self) -> BirdeyeDataSource:
+        """Get or create Birdeye data source."""
+        if self._birdeye is None:
+            self._birdeye = BirdeyeDataSource()
+        return self._birdeye
+
+    def _serialize_for_cache(self, data: list[dict]) -> list[dict]:
+        """Serialize data for JSON cache (convert datetime to ISO string)."""
+        result = []
+        for item in data:
+            serialized = {}
+            for key, value in item.items():
+                if isinstance(value, datetime):
+                    serialized[key] = value.isoformat()
+                else:
+                    serialized[key] = value
+            result.append(serialized)
+        return result
+
+    def _deserialize_from_cache(self, data: list[dict]) -> list[dict]:
+        """Deserialize data from JSON cache (convert ISO string to datetime)."""
+        result = []
+        for item in data:
+            deserialized = {}
+            for key, value in item.items():
+                if key == "timestamp" and isinstance(value, str):
+                    deserialized[key] = datetime.fromisoformat(value)
+                else:
+                    deserialized[key] = value
+            result.append(deserialized)
+        return result
+
+    async def load_price_history(
+        self,
+        token_symbol: str,
+        interval: str = "1H",
+        days: int = 30,
+    ) -> tuple[list[dict], str]:
+        """
+        Load price history for a token.
+
+        Args:
+            token_symbol: Token symbol (e.g., "SOL")
+            interval: Candle interval (1H, 4H, 1D)
+            days: Number of days of history
+
+        Returns:
+            Tuple of (price_history, data_source)
+            - price_history: List of {token: price, timestamp: datetime}
+            - data_source: "cache" or "birdeye"
+
+        Raises:
+            ValueError: If token unknown or no data available
+        """
+        # Resolve token symbol to mint address
+        mint_address = get_mint_address(token_symbol)
+        if mint_address is None:
+            raise ValueError(f"Unknown token: {token_symbol}")
+
+        # Check cache first
+        cache_key = self._build_cache_key(token_symbol, interval, days)
+        cached_data = self._read_cache(cache_key)
+        if cached_data is not None:
+            return self._deserialize_from_cache(cached_data), "cache"
+
+        # Fetch from Birdeye
+        birdeye = self._get_birdeye()
+        # Calculate limit: candles per day depends on interval
+        candles_per_day = {"1H": 24, "4H": 6, "1D": 1}.get(interval, 24)
+        limit = days * candles_per_day
+
+        ohlcv_data = await birdeye.get_ohlcv(mint_address, interval, limit)
+
+        if not ohlcv_data:
+            raise ValueError(f"No price data available for {token_symbol}")
+
+        # Transform to backtest format
+        price_history = self._transform_to_backtest_format(ohlcv_data, token_symbol)
+
+        # Cache the result
+        self._write_cache(cache_key, self._serialize_for_cache(price_history))
+
+        return price_history, "birdeye"
+
+    async def close(self) -> None:
+        """Close any open connections."""
+        if self._birdeye is not None:
+            await self._birdeye.close()
+            self._birdeye = None
