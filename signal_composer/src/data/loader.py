@@ -5,6 +5,7 @@ import os
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from src.data.sources.base import OHLCV
 from src.data.sources.birdeye import BirdeyeDataSource
 from src.data.tokens import get_mint_address
 
@@ -49,3 +50,24 @@ class PriceDataLoader:
         path = self._cache_path(key)
         with open(path, "w") as f:
             json.dump(data, f)
+
+    def _transform_to_backtest_format(
+        self, ohlcv_data: list[OHLCV], token_symbol: str
+    ) -> list[dict]:
+        """
+        Transform OHLCV candles to backtest engine format.
+
+        Args:
+            ohlcv_data: List of OHLCV candles from Birdeye
+            token_symbol: Token symbol (e.g., "SOL")
+
+        Returns:
+            List of dicts with {token_symbol: close_price, timestamp: datetime}
+        """
+        return [
+            {
+                token_symbol: candle.close,
+                "timestamp": candle.timestamp,
+            }
+            for candle in ohlcv_data
+        ]
