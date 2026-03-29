@@ -22,6 +22,7 @@ from src.engine.dsl.parser import parse_strategy
 from src.engine.dsl.validator import validate_strategy
 from src.simulation.backtest import BacktestEngine
 from src.simulation.persistence import SimulationPersistence
+from src.data.loader import PriceDataLoader
 
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
@@ -195,20 +196,46 @@ async def run_backtest(
     # Parse DSL
     strategy_dsl = parse_strategy(strategy.dsl_json)
 
-    # Generate synthetic price history
-    base_price = 100.0
-    base_time = datetime.now(timezone.utc) - timedelta(days=data.days)
-    price_history = []
+    # Get price history
+    data_source = "synthetic"
 
-    for i in range(data.days * 48):
-        timestamp = base_time + timedelta(minutes=i * 30)
-        change = random.gauss(0.001, 0.02)
-        base_price *= 1 + change
+    if data.use_real_data:
+        loader = PriceDataLoader()
+        try:
+            # Load data for first token (primary token)
+            if not strategy_dsl.tokens:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Strategy has no tokens defined",
+                )
 
-        tick = {"timestamp": timestamp}
-        for token in strategy_dsl.tokens:
-            tick[token] = base_price * (1 + random.gauss(0, 0.01))
-        price_history.append(tick)
+            price_history, data_source = await loader.load_price_history(
+                token_symbol=strategy_dsl.tokens[0],
+                interval="1H",
+                days=data.days,
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+        finally:
+            await loader.close()
+    else:
+        # Generate synthetic price history (existing logic)
+        base_price = 100.0
+        base_time = datetime.now(timezone.utc) - timedelta(days=data.days)
+        price_history = []
+
+        for i in range(data.days * 24):  # Hourly candles
+            timestamp = base_time + timedelta(hours=i)
+            change = random.gauss(0.001, 0.02)
+            base_price *= 1 + change
+
+            tick = {"timestamp": timestamp}
+            for token in strategy_dsl.tokens:
+                tick[token] = base_price * (1 + random.gauss(0, 0.01))
+            price_history.append(tick)
 
     # Run backtest
     engine = BacktestEngine(
@@ -232,4 +259,5 @@ async def run_backtest(
         win_rate=result.win_rate,
         equity_curve=result.equity_curve,
         saved=True,
+        data_source=data_source,
     )
