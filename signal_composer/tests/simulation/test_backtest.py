@@ -1,15 +1,10 @@
 """Tests for backtesting engine."""
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
-# Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
-from engine.dsl.types import (
+from src.engine.dsl.types import (
     Strategy,
     Trigger,
     SimpleCondition,
@@ -21,7 +16,7 @@ from engine.dsl.types import (
     Operator,
     Window,
 )
-from simulation.backtest import BacktestEngine, BacktestResult
+from src.simulation.backtest import BacktestEngine, BacktestResult
 
 
 class TestBacktestWithSingleTrigger:
@@ -52,7 +47,7 @@ class TestBacktestWithSingleTrigger:
                 ),
             ],
             risk_rules=RiskRules(
-                stop_loss_pct=10.0,
+                stop_loss_pct=-10.0,
                 max_position_pct=50.0,
                 max_trades_per_day=10,
                 slippage_limit_bps=200,
@@ -116,7 +111,7 @@ class TestBacktestRespectsRiskRules:
                 ),
             ],
             risk_rules=RiskRules(
-                stop_loss_pct=10.0,
+                stop_loss_pct=-10.0,
                 max_position_pct=40.0,  # Cap at 40%
                 max_trades_per_day=100,
                 slippage_limit_bps=200,
@@ -181,7 +176,7 @@ class TestBacktestWithDerivedStreams:
                 ),
             ],
             risk_rules=RiskRules(
-                stop_loss_pct=10.0,
+                stop_loss_pct=-10.0,
                 max_position_pct=50.0,
                 max_trades_per_day=10,
                 slippage_limit_bps=200,
@@ -238,7 +233,7 @@ class TestBacktestResultHasPerformanceMetrics:
                 ),
             ],
             risk_rules=RiskRules(
-                stop_loss_pct=10.0,
+                stop_loss_pct=-10.0,
                 max_position_pct=50.0,
                 max_trades_per_day=10,
                 slippage_limit_bps=200,
@@ -317,7 +312,7 @@ class TestBacktestSellTriggers:
                 ),
             ],
             risk_rules=RiskRules(
-                stop_loss_pct=10.0,
+                stop_loss_pct=-10.0,
                 max_position_pct=50.0,
                 max_trades_per_day=20,
                 slippage_limit_bps=200,
@@ -349,3 +344,135 @@ class TestBacktestSellTriggers:
 
         # Equity curve should track through the journey
         assert len(result.equity_curve) == len(price_history)
+
+
+class TestBacktestStopLoss:
+    """Test that stop-loss is enforced during backtest."""
+
+    def test_stop_loss_triggers_on_price_drop(self):
+        """Stop-loss should auto-sell when position drops below threshold."""
+        from src.engine.dsl.types import (
+            Strategy,
+            Trigger,
+            Action,
+            ActionType,
+            SimpleCondition,
+            Operator,
+            RiskRules,
+        )
+        from src.simulation.backtest import BacktestEngine
+
+        # Simple buy strategy - buy when price < 100
+        strategy = Strategy(
+            id="stop_loss_test",
+            name="Stop Loss Test",
+            description="Test stop-loss enforcement",
+            tokens=["SOL"],
+            triggers=[
+                Trigger(
+                    id="buy_signal",
+                    when=SimpleCondition(
+                        metric="price",
+                        token="SOL",
+                        op=Operator.LT,
+                        value=100.0,
+                    ),
+                    action=Action(
+                        type=ActionType.BUY,
+                        token="SOL",
+                        amount_pct=50.0,
+                    ),
+                ),
+            ],
+            risk_rules=RiskRules(
+                stop_loss_pct=-10.0,  # Sell if down 10%
+                max_position_pct=100.0,
+                max_trades_per_day=20,
+                slippage_limit_bps=100,
+            ),
+        )
+
+        # Price history: buy at 95, then price drops > 10% to trigger stop-loss
+        price_history = [
+            {"SOL": 100.0},  # No buy
+            {"SOL": 95.0},  # BUY at ~95.95 (with 1% slippage)
+            {"SOL": 90.0},  # Position down ~6% - no stop-loss yet
+            {"SOL": 85.0},  # Position down ~11% - STOP-LOSS triggers!
+            {"SOL": 80.0},  # No position left
+            {"SOL": 90.0},  # Price recovers
+        ]
+
+        engine = BacktestEngine(initial_capital=10000.0, slippage_bps=100)
+        result = engine.run(strategy, price_history)
+
+        # Should have at least one buy and one stop-loss sell
+        buy_trades = [t for t in result.trades if t.action == ActionType.BUY]
+        stop_loss_trades = [t for t in result.trades if t.trigger_id == "stop_loss"]
+
+        assert len(buy_trades) >= 1, "Should have at least one buy"
+        assert len(stop_loss_trades) >= 1, "Stop-loss should have triggered"
+
+        # The stop-loss trade should be a SELL_ALL
+        assert stop_loss_trades[0].action == ActionType.SELL_ALL
+        assert stop_loss_trades[0].token == "SOL"
+
+    def test_stop_loss_does_not_trigger_within_threshold(self):
+        """Stop-loss should NOT trigger if loss is within threshold."""
+        from src.engine.dsl.types import (
+            Strategy,
+            Trigger,
+            Action,
+            ActionType,
+            SimpleCondition,
+            Operator,
+            RiskRules,
+        )
+        from src.simulation.backtest import BacktestEngine
+
+        strategy = Strategy(
+            id="stop_loss_test_2",
+            name="Stop Loss Test 2",
+            description="Test stop-loss threshold",
+            tokens=["SOL"],
+            triggers=[
+                Trigger(
+                    id="buy_signal",
+                    when=SimpleCondition(
+                        metric="price",
+                        token="SOL",
+                        op=Operator.LT,
+                        value=100.0,
+                    ),
+                    action=Action(
+                        type=ActionType.BUY,
+                        token="SOL",
+                        amount_pct=50.0,
+                    ),
+                ),
+            ],
+            risk_rules=RiskRules(
+                stop_loss_pct=-10.0,  # Sell if down 10%
+                max_position_pct=100.0,
+                max_trades_per_day=20,
+                slippage_limit_bps=100,
+            ),
+        )
+
+        # Price history: buy at 95, price drops but stays within 10% threshold
+        price_history = [
+            {"SOL": 95.0},  # BUY at ~95.95 (with slippage)
+            {"SOL": 92.0},  # Down ~4% - no stop-loss
+            {"SOL": 90.0},  # Down ~6% - no stop-loss
+            {"SOL": 88.0},  # Down ~8% - still no stop-loss (within -10%)
+            {"SOL": 95.0},  # Back up
+        ]
+
+        engine = BacktestEngine(initial_capital=10000.0, slippage_bps=100)
+        result = engine.run(strategy, price_history)
+
+        # Should NOT have any stop-loss trades
+        stop_loss_trades = [t for t in result.trades if t.trigger_id == "stop_loss"]
+        assert len(stop_loss_trades) == 0, "Stop-loss should NOT have triggered"
+
+        # Position should still exist
+        assert "SOL" in result.final_portfolio.positions

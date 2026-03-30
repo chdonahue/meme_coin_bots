@@ -4,12 +4,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
-from engine.dsl.types import Strategy, DerivedStream
-from engine.dsl.executor import StrategyExecutor
-from engine.streams.derived import DerivedStreamCalculator
-from simulation.portfolio import Portfolio
-from simulation.executor import PaperTradeExecutor, TradeRecord
-from simulation.metrics import PerformanceCalculator
+from ..engine.dsl.types import Strategy, DerivedStream
+from ..engine.dsl.executor import StrategyExecutor
+from ..engine.streams.derived import DerivedStreamCalculator
+from .portfolio import Portfolio
+from .executor import PaperTradeExecutor, TradeRecord
+from .metrics import PerformanceCalculator
 
 
 # Window to ticks mapping for derived stream calculations
@@ -116,6 +116,15 @@ class BacktestEngine:
                 if trade is not None:
                     trades.append(trade)
 
+            # Check and execute stop-losses
+            stop_loss_trades = self._check_stop_losses(
+                portfolio=portfolio,
+                prices=prices,
+                stop_loss_pct=strategy.risk_rules.stop_loss_pct,
+                timestamp=timestamp,
+            )
+            trades.extend(stop_loss_trades)
+
             # Record equity at current prices
             equity = portfolio.total_value_at_prices(prices)
             equity_curve.append(equity)
@@ -138,6 +147,64 @@ class BacktestEngine:
             trades=trades,
             final_portfolio=portfolio,
         )
+
+    def _check_stop_losses(
+        self,
+        portfolio: Portfolio,
+        prices: Dict[str, float],
+        stop_loss_pct: float,
+        timestamp: datetime,
+    ) -> List[TradeRecord]:
+        """
+        Check all positions for stop-loss conditions and execute sells.
+
+        Args:
+            portfolio: Current portfolio state
+            prices: Current token prices
+            stop_loss_pct: Stop-loss threshold (negative, e.g., -10 for 10% loss)
+            timestamp: Current timestamp
+
+        Returns:
+            List of TradeRecords for stop-loss sells
+        """
+        from ..engine.dsl.types import ActionType
+
+        trades = []
+
+        # Check each position
+        for token, position in list(portfolio.positions.items()):
+            if token not in prices:
+                continue
+
+            current_price = prices[token]
+            entry_price = position.avg_entry_price
+
+            # Calculate percentage change from entry
+            pnl_pct = ((current_price - entry_price) / entry_price) * 100
+
+            # If loss exceeds stop-loss threshold, sell all
+            if pnl_pct <= stop_loss_pct:
+                quantity = position.quantity
+                # Apply slippage (worse price on sell)
+                slippage_multiplier = self.slippage_bps / 10000.0
+                exec_price = current_price * (1 - slippage_multiplier)
+
+                # Execute the sell
+                portfolio.execute_sell(token, quantity, exec_price)
+
+                trades.append(
+                    TradeRecord(
+                        action=ActionType.SELL_ALL,
+                        token=token,
+                        amount=quantity,
+                        price_at_exec=exec_price,
+                        timestamp=timestamp,
+                        trigger_id="stop_loss",
+                        slippage_bps=self.slippage_bps,
+                    )
+                )
+
+        return trades
 
     def _compute_derived_streams(
         self,

@@ -1,17 +1,12 @@
 """Tests for paper trade executor."""
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
-# Add src directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
-from engine.dsl.types import Action, ActionType, RiskRules
-from simulation.portfolio import Portfolio
-from simulation.executor import PaperTradeExecutor, TradeRecord
+from src.engine.dsl.types import Action, ActionType, RiskRules
+from src.simulation.portfolio import Portfolio
+from src.simulation.executor import PaperTradeExecutor, TradeRecord
 
 
 class TestPaperTradeExecutor:
@@ -88,7 +83,7 @@ class TestPaperTradeExecutor:
         """Buy is capped at max_position_pct from risk rules."""
         portfolio = Portfolio(initial_balance=10000.0)
         risk_rules = RiskRules(
-            stop_loss_pct=5.0,
+            stop_loss_pct=-5.0,
             max_position_pct=30.0,  # Max 30% in any one position
             max_trades_per_day=10,
             slippage_limit_bps=200,
@@ -111,7 +106,7 @@ class TestPaperTradeExecutor:
         """Trade skipped if slippage exceeds risk rule limit."""
         portfolio = Portfolio(initial_balance=10000.0)
         risk_rules = RiskRules(
-            stop_loss_pct=5.0,
+            stop_loss_pct=-5.0,
             max_position_pct=30.0,
             max_trades_per_day=10,
             slippage_limit_bps=50,  # Only allow 0.5% slippage
@@ -132,7 +127,7 @@ class TestPaperTradeExecutor:
         """Third trade is blocked after 2 allowed."""
         portfolio = Portfolio(initial_balance=10000.0)
         risk_rules = RiskRules(
-            stop_loss_pct=5.0,
+            stop_loss_pct=-5.0,
             max_position_pct=50.0,
             max_trades_per_day=2,  # Only 2 trades per day
             slippage_limit_bps=200,
