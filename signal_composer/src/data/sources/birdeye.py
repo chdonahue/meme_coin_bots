@@ -18,6 +18,8 @@ class BirdeyeDataSource(DataSource):
         self.api_key = api_key or os.getenv("BIRDEYE_API_KEY", "")
         self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
+        self._last_request_time: float = 0.0
+        self._min_request_interval: float = 1.1  # Slightly over 1 second for safety
 
     @property
     def name(self) -> str:
@@ -29,8 +31,21 @@ class BirdeyeDataSource(DataSource):
             self._client = httpx.AsyncClient(timeout=self.timeout, headers=headers)
         return self._client
 
+    async def _throttle(self) -> None:
+        """Ensure we don't exceed rate limits (1 req/sec for free tier)."""
+        import asyncio
+        import time
+
+        now = time.time()
+        elapsed = now - self._last_request_time
+        if elapsed < self._min_request_interval:
+            wait_time = self._min_request_interval - elapsed
+            await asyncio.sleep(wait_time)
+        self._last_request_time = time.time()
+
     async def _fetch_price(self, token: str) -> dict[str, Any]:
         """Fetch price from Birdeye API."""
+        await self._throttle()
         client = await self._get_client()
         response = await client.get(f"{self.BASE_URL}/defi/price", params={"address": token})
         response.raise_for_status()
@@ -39,9 +54,24 @@ class BirdeyeDataSource(DataSource):
     async def _fetch_ohlcv(self, token: str, interval: str, limit: int) -> dict[str, Any]:
         """Fetch OHLCV from Birdeye API with retry on rate limit."""
         import asyncio
+        import time as time_module
 
+        await self._throttle()
         client = await self._get_client()
         max_retries = 3
+
+        # Calculate time range based on interval and limit
+        interval_seconds = {
+            "1m": 60,
+            "5m": 300,
+            "15m": 900,
+            "1H": 3600,
+            "4H": 14400,
+            "1D": 86400,
+        }.get(interval, 3600)
+
+        time_to = int(time_module.time())
+        time_from = time_to - (limit * interval_seconds)
 
         for attempt in range(max_retries):
             response = await client.get(
@@ -49,7 +79,8 @@ class BirdeyeDataSource(DataSource):
                 params={
                     "address": token,
                     "type": interval,
-                    "limit": limit,
+                    "time_from": time_from,
+                    "time_to": time_to,
                 },
             )
 
