@@ -202,18 +202,38 @@ async def run_backtest(
     if data.use_real_data:
         loader = PriceDataLoader()
         try:
-            # Load data for first token (primary token)
+            # Load data for all tokens in the strategy
             if not strategy_dsl.tokens:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Strategy has no tokens defined",
                 )
 
-            price_history, data_source = await loader.load_price_history(
-                token_symbol=strategy_dsl.tokens[0],
-                interval="1H",
-                days=data.days,
-            )
+            # Load each token's price history
+            all_token_data: dict[str, list[dict]] = {}
+            for token in strategy_dsl.tokens:
+                token_history, source = await loader.load_price_history(
+                    token_symbol=token,
+                    interval="1H",
+                    days=data.days,
+                )
+                all_token_data[token] = token_history
+                data_source = source  # Will be "cache" or "birdeye"
+
+            # Merge token data into unified price history
+            # Each tick should have all token prices at the same timestamp
+            if all_token_data:
+                first_token = strategy_dsl.tokens[0]
+                price_history = []
+                for i, tick in enumerate(all_token_data[first_token]):
+                    merged_tick = {"timestamp": tick["timestamp"]}
+                    for token in strategy_dsl.tokens:
+                        if i < len(all_token_data[token]):
+                            merged_tick[token] = all_token_data[token][i][token]
+                    price_history.append(merged_tick)
+            else:
+                price_history = []
+
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
