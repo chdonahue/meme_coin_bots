@@ -37,16 +37,33 @@ class BirdeyeDataSource(DataSource):
         return response.json()
 
     async def _fetch_ohlcv(self, token: str, interval: str, limit: int) -> dict[str, Any]:
-        """Fetch OHLCV from Birdeye API."""
+        """Fetch OHLCV from Birdeye API with retry on rate limit."""
+        import asyncio
+
         client = await self._get_client()
-        response = await client.get(
-            f"{self.BASE_URL}/defi/ohlcv",
-            params={
-                "address": token,
-                "type": interval,
-                "limit": limit,
-            },
-        )
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            response = await client.get(
+                f"{self.BASE_URL}/defi/ohlcv",
+                params={
+                    "address": token,
+                    "type": interval,
+                    "limit": limit,
+                },
+            )
+
+            if response.status_code == 429:
+                # Rate limited - wait and retry
+                wait_time = 2**attempt  # 1, 2, 4 seconds
+                print(f"Rate limited, waiting {wait_time}s...")
+                await asyncio.sleep(wait_time)
+                continue
+
+            response.raise_for_status()
+            return response.json()
+
+        # Final attempt failed
         response.raise_for_status()
         return response.json()
 
