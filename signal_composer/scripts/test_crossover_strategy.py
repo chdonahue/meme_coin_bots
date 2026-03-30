@@ -156,7 +156,7 @@ async def main():
     )
     print(f"   Max Drawdown:     {result.max_drawdown_pct:.2f}%")
     print(f"   Trade Count:      {result.trade_count}")
-    print(f"   Win Rate:         {result.win_rate:.1%}")
+    print(f"   Win Rate:         {result.win_rate:.1f}%")
 
     if result.trades:
         print("\n   Trades:")
