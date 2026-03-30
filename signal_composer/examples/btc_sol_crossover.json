@@ -1,0 +1,62 @@
+{
+  "id": "btc_sol_crossover",
+  "name": "BTC/SOL MA Crossover",
+  "description": "Buy SOL when BTC shows golden cross, sell on death cross",
+  "version": 1,
+
+  "tokens": ["BTC", "SOL"],
+
+  "derived_streams": [
+    {
+      "id": "btc_ma_fast",
+      "name": "BTC 12-period MA",
+      "type": "moving_average",
+      "token": "BTC",
+      "metric": "price",
+      "window": "1h"
+    },
+    {
+      "id": "btc_ma_slow",
+      "name": "BTC 26-period MA",
+      "type": "moving_average",
+      "token": "BTC",
+      "metric": "price",
+      "window": "4h"
+    }
+  ],
+
+  "triggers": [
+    {
+      "id": "golden_cross",
+      "when": {
+        "metric": "btc_ma_fast",
+        "op": "crosses_above",
+        "compare_to": "btc_ma_slow"
+      },
+      "action": {
+        "type": "buy",
+        "token": "SOL",
+        "amount_pct": 50.0
+      }
+    },
+    {
+      "id": "death_cross",
+      "when": {
+        "metric": "btc_ma_fast",
+        "op": "crosses_below",
+        "compare_to": "btc_ma_slow"
+      },
+      "action": {
+        "type": "sell_all",
+        "token": "SOL"
+      }
+    }
+  ],
+
+  "risk_rules": {
+    "stop_loss_pct": -10.0,
+    "max_position_pct": 50.0,
+    "max_trades_per_day": 5,
+    "slippage_limit_bps": 100
+  }
+}
