@@ -87,7 +87,6 @@ class BirdeyeDataSource(DataSource):
             if response.status_code == 429:
                 # Rate limited - wait and retry
                 wait_time = 2**attempt  # 1, 2, 4 seconds
-                print(f"Rate limited, waiting {wait_time}s...")
                 await asyncio.sleep(wait_time)
                 continue
 
