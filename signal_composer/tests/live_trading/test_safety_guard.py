@@ -90,3 +90,32 @@ class TestSafetyGuard:
         result = guard.check_concurrent_txs(current_count=3)
         assert not result.allowed
         assert "concurrent" in result.reason.lower()
+
+    def test_run_all_checks_all_pass(self, guard):
+        """All checks pass returns success."""
+        result = guard.run_all_checks(
+            trade_usd=Decimal("100"),
+            current_daily_usd=Decimal("500"),
+            current_daily_loss_usd=Decimal("100"),
+            last_trade_at=datetime.now(timezone.utc) - timedelta(seconds=60),
+            concurrent_tx_count=1,
+        )
+        assert result.allowed
+
+    def test_run_all_checks_fails_on_trade_size(self, guard):
+        """First failing check returns failure."""
+        result = guard.run_all_checks(
+            trade_usd=Decimal("600"),  # Exceeds max_trade_usd
+            current_daily_usd=Decimal("0"),
+            current_daily_loss_usd=Decimal("0"),
+            last_trade_at=datetime.now(timezone.utc) - timedelta(seconds=60),
+            concurrent_tx_count=0,
+        )
+        assert not result.allowed
+        assert "exceeds max" in result.reason.lower()
+
+    def test_check_daily_loss_exactly_at_limit(self, guard):
+        """Daily loss exactly at limit should fail (zero-tolerance policy)."""
+        result = guard.check_daily_loss(current_daily_loss_usd=Decimal("500"))
+        assert not result.allowed
+        assert "daily loss" in result.reason.lower()
