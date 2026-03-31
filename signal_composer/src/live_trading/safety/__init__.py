@@ -1,5 +1,12 @@
 """Safety guards for live trading."""
 
-from .guard import SafetyConfig, SafetyCheckResult, SafetyGuard
+from .circuit_breaker import CircuitBreaker, CircuitState
+from .guard import SafetyCheckResult, SafetyConfig, SafetyGuard
 
-__all__ = ["SafetyConfig", "SafetyCheckResult", "SafetyGuard"]
+__all__ = [
+    "CircuitBreaker",
+    "CircuitState",
+    "SafetyCheckResult",
+    "SafetyConfig",
+    "SafetyGuard",
+]
