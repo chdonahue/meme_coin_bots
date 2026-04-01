@@ -2,6 +2,7 @@
 
 from .jupiter import SwapQuote, SwapService
 from .solana_rpc import ConfirmMonitor, SubmitResult, TxStatus, TxSubmitter
+from .wallet import WalletService
 
 __all__ = [
     "ConfirmMonitor",
@@ -10,4 +11,5 @@ __all__ = [
     "SwapService",
     "TxStatus",
     "TxSubmitter",
+    "WalletService",
 ]
