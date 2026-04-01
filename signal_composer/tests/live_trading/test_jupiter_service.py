@@ -2,7 +2,8 @@
 
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
+import httpx
 
 from src.live_trading.services.jupiter import SwapQuote, SwapService
 
@@ -138,3 +139,88 @@ class TestSwapService:
         # Close it
         await service.close()
         assert service._client is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_quote_json_decode_error(self, service):
+        """Test handling of JSON decode error in quote fetch."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+
+        with patch.object(service, "_get_client", new_callable=AsyncMock) as mock_client_getter:
+            mock_client = AsyncMock()
+            mock_client_getter.return_value = mock_client
+            mock_client.get.return_value = mock_response
+
+            result = await service._fetch_quote(
+                input_mint="So11111111111111111111111111111111111111112",
+                output_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                amount=1_000_000_000,
+                slippage_bps=100,
+            )
+
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_fetch_swap_tx_json_decode_error(self, service):
+        """Test handling of JSON decode error in swap tx fetch."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+
+        with patch.object(service, "_get_client", new_callable=AsyncMock) as mock_client_getter:
+            mock_client = AsyncMock()
+            mock_client_getter.return_value = mock_client
+            mock_client.post.return_value = mock_response
+
+            quote_data = {
+                "inputMint": "So11111111111111111111111111111111111111112",
+                "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            }
+
+            result = await service._fetch_swap_tx(quote_data, "TestPublicKey123")
+
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_quote_with_quote_json_decode_error(self, service):
+        """Test get_quote handles quote JSON decode error."""
+        with patch.object(service, "_fetch_quote", new_callable=AsyncMock) as mock_quote:
+            mock_quote.return_value = None
+
+            quote = await service.get_quote(
+                input_mint="So11111111111111111111111111111111111111112",
+                output_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                amount=1_000_000_000,
+                slippage_bps=100,
+            )
+
+            assert quote is None
+
+    @pytest.mark.asyncio
+    async def test_get_quote_with_swap_json_decode_error(self, service):
+        """Test get_quote handles swap tx JSON decode error."""
+        mock_quote_response = {
+            "inputMint": "So11111111111111111111111111111111111111112",
+            "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "inAmount": "1000000000",
+            "outAmount": "100000000",
+            "priceImpactPct": "0.1",
+            "routePlan": [],
+        }
+
+        with patch.object(service, "_fetch_quote", new_callable=AsyncMock) as mock_quote:
+            with patch.object(service, "_fetch_swap_tx", new_callable=AsyncMock) as mock_swap:
+                mock_quote.return_value = mock_quote_response
+                mock_swap.return_value = None  # Simulating JSON decode error
+
+                quote = await service.get_quote(
+                    input_mint="So11111111111111111111111111111111111111112",
+                    output_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    amount=1_000_000_000,
+                    slippage_bps=100,
+                    user_public_key="TestPublicKey123",
+                )
+
+                assert quote is not None
+                assert quote.swap_transaction == ""

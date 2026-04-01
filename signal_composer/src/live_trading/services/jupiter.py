@@ -75,6 +75,9 @@ class SwapService:
         except httpx.RequestError as e:
             logger.error(f"Jupiter quote request error: {e}")
             return None
+        except ValueError as e:  # Includes JSONDecodeError
+            logger.error(f"Jupiter quote JSON decode error: {e}")
+            return None
 
     async def _fetch_swap_tx(
         self,
@@ -96,6 +99,9 @@ class SwapService:
             return None
         except httpx.RequestError as e:
             logger.error(f"Jupiter swap request error: {e}")
+            return None
+        except ValueError as e:  # Includes JSONDecodeError
+            logger.error(f"Jupiter swap JSON decode error: {e}")
             return None
 
     async def get_quote(
