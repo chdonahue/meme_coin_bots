@@ -7,6 +7,7 @@ from .state_machine import (
     Transaction,
 )
 from .services.jupiter import SwapQuote, SwapService
+from .coordinator import TransactionCoordinator
 
 __all__ = [
     "TransactionState",
@@ -15,4 +16,5 @@ __all__ = [
     "Transaction",
     "SwapQuote",
     "SwapService",
+    "TransactionCoordinator",
 ]
