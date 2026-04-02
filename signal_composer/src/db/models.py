@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    LargeBinary,
     Numeric,
     String,
 )
@@ -40,6 +41,26 @@ class User(Base):
 
     # Relationships
     strategies: Mapped[list["Strategy"]] = relationship(back_populates="creator")
+    trading_wallets: Mapped[list["TradingWallet"]] = relationship(back_populates="user")
+
+
+class TradingWallet(Base):
+    """Trading wallet with encrypted private key."""
+
+    __tablename__ = "trading_wallets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    address: Mapped[str] = mapped_column(String(44), unique=True)
+    encrypted_private_key: Mapped[bytes] = mapped_column(LargeBinary)
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship(back_populates="trading_wallets")
+    strategies: Mapped[list["Strategy"]] = relationship(back_populates="wallet")
 
 
 class Strategy(Base):
@@ -50,6 +71,7 @@ class Strategy(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     external_id: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     creator_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    wallet_id: Mapped[int | None] = mapped_column(ForeignKey("trading_wallets.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str] = mapped_column(String(500), default="")
     dsl_json: Mapped[dict[str, Any]] = mapped_column(JSON)
@@ -67,6 +89,7 @@ class Strategy(Base):
 
     # Relationships
     creator: Mapped["User"] = relationship(back_populates="strategies")
+    wallet: Mapped["TradingWallet | None"] = relationship(back_populates="strategies")
     performance: Mapped[list["StrategyPerformance"]] = relationship(back_populates="strategy")
     trades: Mapped[list["PaperTrade"]] = relationship(back_populates="strategy")
 
