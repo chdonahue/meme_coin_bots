@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from datetime import datetime, timezone
 
+from src.wallets.reserve import RESERVE_SOL, get_available_capital
+
 
 @dataclass
 class SafetyConfig:
@@ -82,6 +84,32 @@ class SafetyGuard:
                 allowed=False,
                 reason=f"Max concurrent txs reached: {current_count}",
             )
+        return SafetyCheckResult(allowed=True)
+
+    def check_reserve_balance(
+        self,
+        wallet_balance_sol: Decimal,
+        trade_amount_sol: Decimal,
+    ) -> SafetyCheckResult:
+        """Check if trade amount respects wallet reserve.
+
+        If trade would dip into reserve, returns success with reduced amount in reason.
+        If balance is below reserve, blocks the trade entirely.
+        """
+        available = get_available_capital(wallet_balance_sol)
+
+        if available <= Decimal("0"):
+            return SafetyCheckResult(
+                allowed=False,
+                reason=f"Insufficient balance: {wallet_balance_sol} SOL below reserve ({RESERVE_SOL} SOL)",
+            )
+
+        if trade_amount_sol > available:
+            return SafetyCheckResult(
+                allowed=True,
+                reason=f"Trade reduced to available: {available} SOL (reserve protected)",
+            )
+
         return SafetyCheckResult(allowed=True)
 
     def run_all_checks(
