@@ -8,42 +8,30 @@
 
 Minimal wallet management for live trading MVP. Solves the core problem: wallets that don't break (rent protection) and clean strategy-to-wallet mapping.
 
-**Phase:** Live trading (builds on Real Money Transactions spec)
-
 ---
 
 ## MVP Scope
 
 | Include | Exclude (Future) |
 |---------|------------------|
-| Store one encrypted mnemonic per user | Multiple mnemonics |
-| Derive wallet per strategy | Wallet listing API |
-| Reserve 0.002 SOL from trades | Elaborate state machine |
-| Link wallet to strategy | Balance caching |
-| Basic balance check before trade | Race condition handling |
+| Store encrypted private key per wallet | Mnemonic-based derivation |
+| Reserve 0.002 SOL from trades | Wallet listing API |
+| Link wallet to strategy | Elaborate state machine |
+| Basic balance check before trade | Balance caching |
 
 ---
 
 ## Data Model
 
 ```sql
--- User mnemonics (one per user)
-CREATE TABLE user_mnemonics (
-    id SERIAL PRIMARY KEY,
-    user_id INT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    encrypted_mnemonic BYTEA NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Trading wallets (derived from mnemonic)
+-- Trading wallets with encrypted private keys
 CREATE TABLE trading_wallets (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    mnemonic_id INT NOT NULL REFERENCES user_mnemonics(id) ON DELETE CASCADE,
-    derivation_index INT NOT NULL,
-    address VARCHAR(44) NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(mnemonic_id, derivation_index)
+    address VARCHAR(44) NOT NULL UNIQUE,
+    encrypted_private_key BYTEA NOT NULL,
+    label VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Add wallet_id to strategies
@@ -54,38 +42,33 @@ ALTER TABLE strategies ADD COLUMN wallet_id INT REFERENCES trading_wallets(id);
 
 ## Core Logic
 
-### 1. Mnemonic Storage
+### 1. Key Storage
 
 ```python
 from cryptography.fernet import Fernet
+from base58 import b58decode, b58encode
 
 PLATFORM_KEY = os.getenv("WALLET_ENCRYPTION_KEY")  # Generate with Fernet.generate_key()
 
-def encrypt_mnemonic(mnemonic: str) -> bytes:
-    return Fernet(PLATFORM_KEY).encrypt(mnemonic.encode())
+def encrypt_private_key(private_key_b58: str) -> bytes:
+    """Encrypt a base58-encoded private key."""
+    return Fernet(PLATFORM_KEY).encrypt(private_key_b58.encode())
 
-def decrypt_mnemonic(encrypted: bytes) -> str:
+def decrypt_private_key(encrypted: bytes) -> str:
+    """Decrypt to base58-encoded private key."""
     return Fernet(PLATFORM_KEY).decrypt(encrypted).decode()
+
+def get_keypair(encrypted: bytes) -> Keypair:
+    """Get usable keypair from encrypted storage."""
+    private_key_b58 = decrypt_private_key(encrypted)
+    key_bytes = b58decode(private_key_b58)
+    if len(key_bytes) == 32:
+        return Keypair.from_seed(key_bytes)
+    else:
+        return Keypair.from_bytes(key_bytes)
 ```
 
-### 2. Wallet Derivation
-
-```python
-from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes
-from solders.keypair import Keypair
-
-def derive_keypair(mnemonic: str, index: int) -> Keypair:
-    """Derive keypair at index (same as legacy BOT wallets)."""
-    seed = Bip39SeedGenerator(mnemonic).Generate()
-    bip44 = Bip44.FromSeed(seed, Bip44Coins.SOLANA)
-    derived = bip44.Purpose().Coin().Account(index).Change(Bip44Changes.CHAIN_EXT).AddressIndex(0)
-
-    priv = derived.PrivateKey().Raw().ToBytes()
-    pub = derived.PublicKey().RawUncompressed().ToBytes()[1:]
-    return Keypair.from_bytes(priv + pub)
-```
-
-### 3. Reserve Protection
+### 2. Reserve Protection
 
 ```python
 RESERVE_SOL = Decimal("0.002")  # Never trade below this
@@ -111,8 +94,7 @@ When starting a live trading session:
 # In LiveTradingSession setup
 strategy = get_strategy(strategy_id)
 wallet = get_wallet(strategy.wallet_id)
-mnemonic = decrypt_mnemonic(wallet.mnemonic.encrypted_mnemonic)
-keypair = derive_keypair(mnemonic, wallet.derivation_index)
+keypair = get_keypair(wallet.encrypted_private_key)
 
 # Before each trade
 balance = fetch_balance(wallet.address)
@@ -125,31 +107,28 @@ if trade_amount > available:
 
 ## User Flow (MVP)
 
-1. **Setup (one-time):** User provides 24-word mnemonic via CLI or simple endpoint
-2. **Create strategy:** System derives next wallet, links to strategy
-3. **Fund wallet:** User sends SOL to derived address
-4. **Start trading:** Session uses derived keypair, respects reserve
+1. **Add wallet:** Provide private key (base58), system encrypts and stores
+2. **Create strategy:** Select wallet to link
+3. **Fund wallet:** Send SOL to wallet address
+4. **Start trading:** Session uses keypair, respects reserve
 
 ---
 
 ## Implementation Checklist
 
-1. [ ] Add `WALLET_ENCRYPTION_KEY` to .env
-2. [ ] Create database migration (2 tables + 1 column)
-3. [ ] Add `encrypt_mnemonic()` / `decrypt_mnemonic()` functions
-4. [ ] Add `derive_keypair()` function (copy from test_with_mnemonic.py)
-5. [ ] Add `get_available_capital()` reserve logic
-6. [ ] Update `LiveTradingSession` to derive keypair from strategy's wallet
-7. [ ] Add reserve check in `SafetyGuard` before trades
-8. [ ] Simple script to set up mnemonic for your user
+1. [ ] Add `WALLET_ENCRYPTION_KEY` to .env (generate with `Fernet.generate_key()`)
+2. [ ] Create database migration (1 table + 1 column)
+3. [ ] Add `encrypt_private_key()` / `decrypt_private_key()` / `get_keypair()` functions
+4. [ ] Add `get_available_capital()` reserve logic
+5. [ ] Update `LiveTradingSession` to get keypair from strategy's wallet
+6. [ ] Add reserve check in `SafetyGuard` before trades
+7. [ ] Simple script to add your wallet
 
 ---
 
 ## Future Enhancements (Not MVP)
 
+- Mnemonic-based derivation (one mnemonic → many wallets)
 - Wallet listing API
-- Wallet state machine (unfunded/available/active)
 - Balance caching
-- Multiple users with race-safe index allocation
-- User password encryption for mnemonics
-- Wallet reassignment between strategies
+- Multiple users
