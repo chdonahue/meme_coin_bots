@@ -5,13 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import TradingWallet
 from src.wallets import encrypt_private_key
+from .base import BaseRepository
 
 
-class WalletRepository:
+class WalletRepository(BaseRepository[TradingWallet]):
     """CRUD operations for trading wallets."""
 
     def __init__(self, session: AsyncSession):
-        self.session = session
+        super().__init__(session, TradingWallet)
 
     async def create(
         self,
@@ -29,7 +30,7 @@ class WalletRepository:
             label=label,
         )
         self.session.add(wallet)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(wallet)
         return wallet
 
