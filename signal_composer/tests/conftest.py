@@ -3,9 +3,13 @@ import sys
 from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 
-# Add src directory to path for imports - must happen before test collection
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add signal_composer directory to path for imports - must happen before test collection
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 @pytest.fixture
