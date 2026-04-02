@@ -10,9 +10,29 @@ from src.db.connection import get_session
 from src.db.models import User
 from src.db.repositories import UserRepository
 from src.api.auth.jwt import decode_access_token, JWTError
+from src.paper_trading import PaperTradingManager
 
 
 security = HTTPBearer()
+
+# Singleton paper trading manager (initialized in main.py lifespan)
+_paper_trading_manager: PaperTradingManager | None = None
+
+
+def set_paper_trading_manager(manager: PaperTradingManager) -> None:
+    """Set the global paper trading manager instance."""
+    global _paper_trading_manager
+    _paper_trading_manager = manager
+
+
+def get_paper_trading_manager() -> PaperTradingManager:
+    """Get the paper trading manager instance."""
+    if _paper_trading_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Paper trading manager not initialized",
+        )
+    return _paper_trading_manager
 
 
 async def get_db_session():

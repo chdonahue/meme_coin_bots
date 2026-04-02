@@ -6,8 +6,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import auth, strategies, performance, trades
-from src.db.connection import init_db
+from src.api.routes import (
+    auth,
+    strategies,
+    performance,
+    trades,
+    paper_trading,
+    live_trading,
+)
+from src.api.dependencies import set_paper_trading_manager
+from src.db.connection import init_db, get_session
+from src.paper_trading import PaperTradingManager
 
 
 def get_cors_origins() -> list[str]:
@@ -18,9 +27,31 @@ def get_cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database on startup."""
+    """Initialize database and paper trading manager on startup."""
     await init_db()
+
+    # Initialize paper trading manager
+    async def session_factory():
+        return get_session()
+
+    manager = PaperTradingManager(
+        db_session_factory=session_factory,
+        default_polling_interval=int(os.getenv("PAPER_TRADING_INTERVAL", "60")),
+    )
+    set_paper_trading_manager(manager)
+
+    # Load any active sessions from database
+    loaded = await manager.load_active_sessions()
+    if loaded > 0:
+        print(f"Loaded {loaded} active paper trading sessions")
+
+    # Start the polling loop
+    await manager.start_polling()
+
     yield
+
+    # Cleanup on shutdown
+    await manager.close()
 
 
 app = FastAPI(
@@ -44,6 +75,8 @@ app.include_router(auth.router)
 app.include_router(strategies.router)
 app.include_router(performance.router)
 app.include_router(trades.router)
+app.include_router(paper_trading.router)
+app.include_router(live_trading.router)
 
 
 @app.get("/health")
